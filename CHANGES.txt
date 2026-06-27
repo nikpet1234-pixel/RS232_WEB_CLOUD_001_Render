@@ -1,32 +1,30 @@
-RS232_WEB_CLOUD_006_CommandQueue_DISABLED
-==========================================
+RS232_WEB_CLOUD_007_CommandQueue_ARMED
+=====================================
 
-Дата: 2026-06-27
-Тип: cloud-only версия. RS232_WEB_108 firmware не е променян.
+Based on accepted RS232_WEB_CLOUD_006_CommandQueue_DISABLED.
 
-Ново:
-- Добавена е структура за бъдеща command queue архитектура.
-- Добавени endpoints:
-  - POST /api/request-command
-  - GET /api/pull
-  - POST /api/ack
-  - GET /api/command-queue
-  - GET /api/command-map
-- Всички команди са заключени: allow_remote_commands=0, command_queue_enabled=0.
-- При опит за команда от UI server-ът връща remote_commands_disabled и не записва нищо.
-- В UI е добавен badge CMD QUEUE: DISABLED.
+Changes:
+- Command queue can now be armed by Render environment variables, but remains OFF by default.
+- Commands are active only when ALL are true:
+  ALLOW_REMOTE_COMMANDS=1
+  COMMAND_QUEUE_ENABLED=1
+  COMMAND_TOKEN is configured
+- POST /api/request-command requires COMMAND_TOKEN when commands are active.
+- GET /api/pull and POST /api/ack require DEVICE_TOKEN.
+- Added in-RAM pending command queue and ACK history.
+- Added command IDs like cmd-000001.
+- Added allowed first-stage commands:
+  set_next_no
+  set_article
+  set_trigger
+  set_cloud_note
+- Explicitly forbidden as first-stage remote commands:
+  loop_start / loop_stop / hold_toggle / SD tools / settings / print / file access / firmware update.
+- UI now shows CMD QUEUE: ARMED only when the server reports commands_active=1.
+- UI can prompt for COMMAND_TOKEN only when the queue is armed.
+- Firmware RS232_WEB_108 remains untouched.
 
-Запазено от 005:
-- Визуална база от RS232_WEB_108 Main страница.
-- Правилен JSON field → UI state mapping.
-- HOLD следва hold.
-- LOOP следва loop_running.
-- Trigger следва trigger_state / trigger_hit.
-- VERIFY следва verified.
-- Cloud Auto Refresh остава отделен от реалния DEVICE LOOP.
-
-Сигурност:
-- Няма tunnel към ESP32.
-- Няма SD Tools / Settings / Diagnostics.
-- Няма директни API команди към уреда.
-- POST /api/push остава защитен с DEVICE_TOKEN.
+Safety:
+- With default Render settings, command queue remains inactive.
+- Public viewer page does not contain COMMAND_TOKEN.
+- Command queue is RAM-only in this stage; Render restart clears it.

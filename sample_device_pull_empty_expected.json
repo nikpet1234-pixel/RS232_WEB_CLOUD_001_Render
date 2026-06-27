@@ -1,3 +1,6 @@
 {
-  "expected": "GET /api/pull returns has_command=false while command queue is disabled."
+  "ok": true,
+  "has_command": false,
+  "command": null,
+  "pending_count": 0
 }

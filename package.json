@@ -1,7 +1,7 @@
 {
-  "name": "rs232-web-cloud-006-command-queue-disabled",
+  "name": "rs232-web-cloud-007-command-queue-armed",
   "version": "1.0.0",
-  "description": "RS232_WEB Cloud Relay 006 - command queue scaffold disabled, read-only cloud Main page",
+  "description": "RS232_WEB Cloud Relay 007 - command queue armed by Render environment variables, safe by default",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RS232_WEB CLOUD Command Queue Disabled</title>
+<title>RS232_WEB CLOUD Command Queue ARMED</title>
 <style>
 
 
@@ -349,7 +349,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   </div>
 
   <div class="cloudNotice mono">
-    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_006 CommandQueue_DISABLED: JSON параметрите управляват UI състоянията. Добавена е структура за бъдещи команди, но command queue е заключен: allow_remote_commands=0.
+    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_007 CommandQueue_ARMED: JSON параметрите управляват UI състоянията. Добавена е структура за бъдещи команди, но command queue се активира само с Render ENV: ALLOW_REMOTE_COMMANDS=1 + COMMAND_QUEUE_ENABLED=1 + COMMAND_TOKEN.
     <div class="cloudControls">
       <button id="btnCloudAuto" class="smallBtn cloud-auto-off" title="Локално обновяване на страницата, не команда към уреда">Cloud Auto Refresh: OFF</button>
       <span class="apiBadge mono warnBg" id="cmdQueueInfo" title="Future command queue status">CMD QUEUE: DISABLED</span>
@@ -360,7 +360,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   </div>
 
   <div class="stateMapPanel mono">
-    Карта на състоянията: <b>hold</b> → HOLD бутон, <b>loop_running</b> → LOOP бутон, <b>trigger_state/trigger_hit</b> → TRIG статус, <b>verified</b> → VERIFY индикация, <b>no/next_no/article/target/tol</b> → съответните полета. При натискане на бутоните не се изпраща команда към уреда, защото allow_remote_commands=0.
+    Карта на състоянията / командите: <b>hold</b> → HOLD бутон, <b>loop_running</b> → LOOP бутон, <b>trigger_state/trigger_hit</b> → TRIG статус, <b>verified</b> → VERIFY индикация, <b>no/next_no/article/target/tol</b> → съответните полета. При активирана queue и въведен COMMAND_TOKEN меките настройки могат да се запишат като чакащи команди; реалното изпълнение става само когато уредът по-късно ги изтегли с /api/pull.
   </div>
 
   <div class="tabs">
@@ -576,7 +576,9 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     pollMs:2500,
     allowRemoteCommands:false,
     commandQueueEnabled:false,
-    pendingCommands:0
+    commandsActive:false,
+    pendingCommands:0,
+    commandToken: localStorage.getItem('rs232_web_command_token') || ''
   };
 
   function toast(msg){
@@ -588,7 +590,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     el._t=setTimeout(()=>el.classList.remove('show'), 2800);
   }
 
-  function localOnly(msg){ toast(msg || 'CLOUD_006: дистанционните команди са изключени. Промяната е само визуална/локална.'); }
+  function localOnly(msg){ toast(msg || 'CLOUD_007: командата не е записана; queue не е активна или няма COMMAND_TOKEN.'); }
 
   function pick(d, ...ks){
     for(const k of ks){ if(d && d[k]!==undefined && d[k]!==null && d[k] !== '') return d[k]; }
@@ -624,7 +626,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       h1: phase(d,'l1','h','h1','H1','l1_l','L1_L') || phase(d,'l1','l'),
       h2: phase(d,'l2','h','h2','H2','l2_l','L2_L') || phase(d,'l2','l'),
       h3: phase(d,'l3','h','h3','H3','l3_l','L3_L') || phase(d,'l3','l'),
-      // CLOUD_006: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
+      // CLOUD_007: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
       uavg: pick(d,'uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'),
       iavg: pick(d,'iavr','iavg','i_avg','i_average','i','I','current'),
       psum: pick(d,'psum','p_sum','ptotal','p_total','p','P','power'),
@@ -645,6 +647,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       loop_running: pick(d,'loop_running','loopRunning','loop','loop_state'),
       verified: pick(d,'verified','verify','verify_ok'),
       allow_remote_commands: Number(pick(d,'allow_remote_commands','allowRemoteCommands') || 0),
+      command_queue_enabled: Number(pick(d,'command_queue_enabled','commandQueueEnabled') || 0),
+      commands_active: Number(pick(d,'commands_active','commandsActive') || 0),
       raw_state: rawState
     };
     return obj;
@@ -664,18 +668,20 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     setTxt('rtcInfo', c?.time || '---');
     const cs=$('cloudState');
     if(cs){
-      const txt = apiStatus || (c ? `ONLINE / CMD OFF` : 'NO DATA');
+      const txt = apiStatus || (c ? (state.commandsActive ? 'ONLINE / CMD ARMED' : 'ONLINE / CMD OFF') : 'NO DATA');
       cs.textContent = txt;
-      cs.className='apiBadge mono ' + (c ? 'okBg' : 'warnBg');
+      cs.className='apiBadge mono ' + (c ? (state.commandsActive ? 'warnBg' : 'okBg') : 'warnBg');
     }
     setTxt('historyInfo', String(state.serverHistory.length || state.logRows.length || 0));
-    setTxt('cmdModeInfo', state.allowRemoteCommands ? 'ON' : 'OFF');
-    setTxt('cmdQueueInfo', state.commandQueueEnabled ? ('CMD QUEUE: ON / '+state.pendingCommands) : 'CMD QUEUE: DISABLED');
+    setTxt('cmdModeInfo', state.commandsActive ? 'ARMED' : (state.allowRemoteCommands ? 'ON / NO TOKEN' : 'OFF'));
+    setTxt('cmdQueueInfo', state.commandsActive ? ('CMD QUEUE: ARMED / '+state.pendingCommands) : (state.commandQueueEnabled ? 'CMD QUEUE: ON / NOT ARMED' : 'CMD QUEUE: DISABLED'));
   }
 
   function setMeasurement(m){
     state.current = m;
     state.allowRemoteCommands = !!Number(m.allow_remote_commands || 0);
+    state.commandQueueEnabled = !!Number(m.command_queue_enabled || 0);
+    state.commandsActive = !!Number(m.commands_active || 0);
     if(m.article) state.articles.add(String(m.article));
     renderArticleList();
 
@@ -735,7 +741,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     if(lb){
       lb.textContent = deviceLoopKnown ? (shownLoop ? 'Stop Loop' : 'Start Loop') : 'Loop ?';
       lb.className = 'primary ' + (deviceLoopKnown ? (shownLoop ? 'device-loop-on' : 'device-loop-off') : 'device-loop-unknown');
-      lb.title = 'DEVICE LOOP state follows JSON loop_running. Click is disabled while allow_remote_commands=0.';
+      lb.title = 'DEVICE LOOP state follows JSON loop_running. Click queues future command only when commands_active=1 and COMMAND_TOKEN is supplied.';
     }
 
     const deviceHoldKnown = boolKnown(m.hold);
@@ -745,7 +751,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       hb.textContent = deviceHoldKnown ? (shownHold ? 'HOLD RUN' : 'HOLD STOP') : 'HOLD ?';
       hb.classList.remove('hold-run','hold-hold','device-hold-unknown');
       hb.classList.add(deviceHoldKnown ? (shownHold ? 'hold-hold' : 'hold-run') : 'device-hold-unknown');
-      hb.title = 'DEVICE HOLD state follows JSON hold. Click is disabled while allow_remote_commands=0.';
+      hb.title = 'DEVICE HOLD state follows JSON hold. Click queues future command only when commands_active=1 and COMMAND_TOKEN is supplied.';
     }
 
     const vi=$('verifyInfo');
@@ -869,31 +875,59 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       const r=await fetch('/api/command-queue', {cache:'no-store'});
       if(!r.ok) return;
       const j=await r.json();
+      state.allowRemoteCommands = !!Number(j.allow_remote_commands || 0);
       state.commandQueueEnabled = !!Number(j.command_queue_enabled || 0);
+      state.commandsActive = !!Number(j.commands_active || 0);
       state.pendingCommands = Number(j.pending_count || 0);
       updateHeader();
     }catch(e){}
   }
 
-  async function requestCommandDisabled(cmd, payload){
-    const body = { cmd, value: payload || null, requested_at: new Date().toISOString(), source: 'cloud_ui' };
+  function commandPayload(cmd){
+    if(cmd==='set_next_no') return { value: $('nextNo')?.value || '' };
+    if(cmd==='set_article') return { value: $('article')?.value || '' };
+    if(cmd==='set_trigger') return {
+      parameter: $('izbor')?.value || '',
+      by: $('trigBy')?.value || '',
+      threshold: $('target')?.value || '',
+      tolerance_pct: $('tolPct')?.value || '',
+      autostop: $('autoStop')?.value || '',
+      enabled: 1
+    };
+    return {};
+  }
+
+  function getCommandToken(){
+    if(state.commandToken) return state.commandToken;
+    const t = prompt('Въведи COMMAND_TOKEN за запис на cloud команда. Не е DEVICE_TOKEN. Остави празно за отказ.');
+    if(t){ state.commandToken=t.trim(); localStorage.setItem('rs232_web_command_token', state.commandToken); }
+    return state.commandToken;
+  }
+
+  async function requestCommand(cmd, payload){
+    const body = { cmd, payload: payload || commandPayload(cmd), requested_at: new Date().toISOString(), source: 'cloud_ui' };
+    const headers = {'Content-Type':'application/json'};
+    if(state.commandsActive){
+      const t=getCommandToken();
+      if(!t){ toast('Командата '+cmd+' не е изпратена: няма COMMAND_TOKEN.'); return; }
+      headers.Authorization = 'Bearer ' + t;
+    }
     try{
-      const r=await fetch('/api/request-command', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(body)
-      });
+      const r=await fetch('/api/request-command', { method:'POST', headers, body:JSON.stringify(body) });
       const j=await r.json().catch(()=>({}));
       if(r.status===403 && j.error==='remote_commands_disabled'){
-        toast('CLOUD_006: командата '+cmd+' НЕ е записана. allow_remote_commands=0.');
+        toast('CLOUD_007: командата '+cmd+' НЕ е записана. Queue не е активна.');
+      } else if(r.status===401){
+        localStorage.removeItem('rs232_web_command_token'); state.commandToken='';
+        toast('Грешен или липсващ COMMAND_TOKEN.');
       } else if(!r.ok){
-        toast('Командата не е приета: HTTP '+r.status);
+        toast('Командата не е приета: '+(j.error || ('HTTP '+r.status)));
       } else {
-        toast('Командата е приета в queue.');
+        toast('Командата е записана в queue: '+(j.command?.id || cmd));
       }
       refreshCommandQueueStatus();
     }catch(e){
-      localOnly('CLOUD_006: command endpoint недостъпен. '+cmd+' няма да се изпрати към уреда.');
+      localOnly('CLOUD_007: command endpoint недостъпен. '+cmd+' няма да се изпрати към уреда.');
     }
   }
 
@@ -902,16 +936,16 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     $('btnReadAdd')?.addEventListener('click',async()=>{ const m=await readLatest(false); if(m) addCurrentRow(); });
     $('btnAddLog')?.addEventListener('click',addCurrentRow);
     $('btnPrintCurrent')?.addEventListener('click',()=>window.print());
-    $('btnHold')?.addEventListener('click',()=>{ requestCommandDisabled('device HOLD'); });
-    $('btnLoop')?.addEventListener('click',()=>requestCommandDisabled('device LOOP'));
+    $('btnHold')?.addEventListener('click',()=>{ requestCommand('hold_toggle'); });
+    $('btnLoop')?.addEventListener('click',()=>requestCommand('loop_start'));
     $('btnCloudAuto')?.addEventListener('click',toggleCloudAutoRefresh);
     $('btnExport')?.addEventListener('click',exportCsv);
     $('btnClearLog')?.addEventListener('click',()=>{ state.logRows=[]; renderLogRows(); toast('Изчистена е само локалната cloud таблица.'); });
-    $('btnArticleAdd')?.addEventListener('click',()=>{ const v=$('article')?.value.trim(); if(v){ state.articles.add(v); renderArticleList(); requestCommandDisabled('set_article'); } });
+    $('btnArticleAdd')?.addEventListener('click',()=>{ const v=$('article')?.value.trim(); if(v){ state.articles.add(v); renderArticleList(); requestCommand('set_article'); } });
     $('article')?.addEventListener('input', updateArticleAddButton);
-    $('btnNoPlus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||0)+1)); requestCommandDisabled('set_next_no'); });
-    $('btnNoMinus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||1)-1)); requestCommandDisabled('set_next_no'); });
-    ['target','tolPct','currentFactor','autoStop','izbor','trigBy','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); if(['target','tolPct','autoStop','izbor','trigBy'].includes(id)) requestCommandDisabled('set_trigger'); }));
+    $('btnNoPlus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||0)+1)); requestCommand('set_next_no'); });
+    $('btnNoMinus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||1)-1)); requestCommand('set_next_no'); });
+    ['target','tolPct','currentFactor','autoStop','izbor','trigBy','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); if(['target','tolPct','autoStop','izbor','trigBy'].includes(id)) requestCommand('set_trigger'); }));
     document.querySelector('#logTable tbody')?.addEventListener('click',ev=>{
       const b=ev.target.closest('button[data-act="copy"]'); if(!b) return;
       const row=state.logRows[Number(b.dataset.i)];
@@ -928,7 +962,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   }
 
   window.addEventListener('load',()=>{
-    bind(); updateHeader('START / CMD OFF'); updatePills(); renderLogRows(); refreshCommandQueueStatus();
+    bind(); updateHeader('START / CMD CHECK'); updatePills(); renderLogRows(); refreshCommandQueueStatus();
     readLatest(true).then(()=>readHistory());
     state.timer=setInterval(()=>{ if(state.cloudAuto && !state.cloudPause) readLatest(true); }, state.pollMs);
   });

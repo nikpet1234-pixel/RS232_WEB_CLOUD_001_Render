@@ -1,0 +1,12 @@
+# Render Environment variables for testing CLOUD_007 command queue
+# Keep this OFF unless you are intentionally testing queued commands.
+
+DEVICE_TOKEN=your-existing-device-token
+COMMAND_TOKEN=another-long-secret-token-for-cloud-ui-commands
+ALLOW_REMOTE_COMMANDS=1
+COMMAND_QUEUE_ENABLED=1
+COMMAND_QUEUE_LIMIT=20
+HISTORY_LIMIT=100
+
+# Optional: if you want the viewer page protected again
+# VIEW_TOKEN=optional-view-token

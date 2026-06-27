@@ -1,133 +1,196 @@
-# RS232_WEB_CLOUD_006_CommandQueue_DISABLED
+# RS232_WEB_CLOUD_007_CommandQueue_ARMED
 
-Дата: 2026-06-27
-Тип: **cloud-only** версия. `RS232_WEB_108` firmware не е променян.
+Това е cloud-only версия. **RS232_WEB_108 firmware не е пипан.**
 
-## Цел
+Версия 007 добавя реална, но контролирано заключена/отключваема опашка за бъдещи команди.
 
-Тази версия добавя **структура за бъдеща двупосочна синхронизация**, но я оставя напълно заключена.
+## Главна идея
 
-Това означава:
+До 006 имахме само структура, която винаги отказва команди.
 
-```text
-Cloud UI може да опита да заяви команда
-→ cloud server я отказва
-→ командата НЕ се записва
-→ ESP32 няма какво да изтегли
-→ уредът не се управлява
-```
-
-Текущият режим остава:
-
-```ini
-allow_remote_commands=0
-command_queue_enabled=0
-```
-
-## Запазено от CLOUD_005
-
-- Визуална база от реалната Main страница на `RS232_WEB_108`.
-- `HOLD` следва JSON полето `hold`.
-- `Start/Stop Loop` следва JSON полето `loop_running`.
-- `Trigger status` следва `trigger_state` / `trigger_hit`.
-- `VERIFY` следва `verified`.
-- `Cloud Auto Refresh` остава отделна локална функция на браузъра.
-- `POST /api/push` остава защитен с `DEVICE_TOKEN`.
-
-## Ново в CLOUD_006
-
-Добавени са endpoints за бъдеща command queue архитектура:
+В 007 вече може да се тества пълният поток:
 
 ```text
-POST /api/request-command
-GET  /api/pull
-POST /api/ack
-GET  /api/command-queue
-GET  /api/command-map
+Cloud UI / PowerShell
+→ POST /api/request-command
+→ командата влиза в RAM queue
+
+ESP32 simulator / PowerShell
+→ GET /api/pull
+→ получава първата чакаща команда
+
+ESP32 simulator / PowerShell
+→ POST /api/ack
+→ потвърждава изпълнение и командата излиза от pending
 ```
 
-Но всички команди са заключени.
+Но това се активира **само ако изрично го включиш в Render**.
 
-### POST /api/request-command
+## По подразбиране е безопасно изключено
 
-При опит от cloud UI да промени например `Next No`, `Article`, `Trigger target`, `HOLD` или `LOOP`, server-ът връща:
+Ако не добавиш специални Render Environment variables, `/health` ще покаже:
+
+```json
+{
+  "service": "RS232_WEB_CLOUD_007_CommandQueue_ARMED",
+  "allow_remote_commands": 0,
+  "command_queue_enabled": 0,
+  "command_token_configured": false,
+  "commands_active": 0
+}
+```
+
+В този режим командите пак се отказват.
+
+## Как се активира само за тест
+
+В Render → Environment добави:
+
+```text
+ALLOW_REMOTE_COMMANDS=1
+COMMAND_QUEUE_ENABLED=1
+COMMAND_TOKEN=друга-дълга-тайна-стойност
+```
+
+`DEVICE_TOKEN` остава както досега и пази ESP32/device операциите.
+
+`COMMAND_TOKEN` е отделен token за записване на команди от cloud UI или PowerShell.
+
+След промяна направи:
+
+```text
+Manual Deploy → Deploy latest commit
+```
+
+После `/health` трябва да покаже:
+
+```json
+"commands_active": 1
+```
+
+## Защо има отделен COMMAND_TOKEN
+
+Страницата за наблюдение при теб се отваря публично без `VIEW_TOKEN`. Затова не е безопасно всеки посетител да може да записва команди.
+
+Затова:
+
+```text
+POST /api/push              → DEVICE_TOKEN
+GET /api/pull               → DEVICE_TOKEN
+POST /api/ack               → DEVICE_TOKEN
+POST /api/request-command    → COMMAND_TOKEN
+```
+
+## Разрешени първи команди
+
+В 007 са разрешени само меки настройки:
+
+```text
+set_next_no
+set_article
+set_trigger
+set_cloud_note
+```
+
+Забранени засега:
+
+```text
+loop_start
+loop_stop
+hold_toggle
+settings
+sdtools
+print
+file_read
+file_write
+firmware_update
+```
+
+Тоест няма управление на цикъл, HOLD, SD карта, настройки или файлове.
+
+## Тест 1: queue изключена
+
+PowerShell:
+
+```powershell
+$commandToken = "ТВОЯ_COMMAND_TOKEN"
+$url = "https://rs232-web-cloud-001-render.onrender.com/api/request-command"
+$body = Get-Content .\sample_command_request_set_next_no.json -Raw
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri $url `
+  -Headers @{ Authorization = "Bearer $commandToken" } `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+Ако не си включил Render ENV, очаквано ще върне:
 
 ```json
 {
   "ok": false,
   "error": "remote_commands_disabled",
   "queued": false,
-  "stored": false,
-  "allow_remote_commands": 0,
-  "command_queue_enabled": 0
+  "stored": false
 }
 ```
 
-Тоест командата **не се записва**.
+## Тест 2: queue активирана
 
-### GET /api/pull
-
-Това е бъдещият endpoint, който ESP32 някой ден ще пита за чакащи команди.
-
-Сега винаги връща:
+След като добавиш Render ENV и redeploy-неш, същата заявка трябва да върне:
 
 ```json
 {
   "ok": true,
-  "has_command": false,
-  "command": null,
-  "allow_remote_commands": 0,
-  "command_queue_enabled": 0
+  "queued": true,
+  "stored": true,
+  "command": {
+    "id": "cmd-000001",
+    "cmd": "set_next_no",
+    "status": "pending"
+  }
 }
 ```
 
-### POST /api/ack
-
-Бъдещ endpoint за потвърждение от ESP32. Сега е заключен и връща `403`.
-
-## Проверка след deploy
-
-Отвори:
-
-```text
-https://rs232-web-cloud-001-render.onrender.com/health
-```
-
-Очаквано:
-
-```json
-{
-  "service": "RS232_WEB_CLOUD_006_CommandQueue_DISABLED",
-  "allow_remote_commands": 0,
-  "command_queue_enabled": 0,
-  "pending_commands": 0
-}
-```
-
-Провери и:
-
-```text
-https://rs232-web-cloud-001-render.onrender.com/api/command-queue
-https://rs232-web-cloud-001-render.onrender.com/api/command-map
-```
-
-## Тест на заключена команда
-
-Пример от PowerShell:
+Провери queue:
 
 ```powershell
-$body = Get-Content .\sample_command_request_set_next_no.json -Raw
+Invoke-RestMethod -Uri "https://rs232-web-cloud-001-render.onrender.com/api/command-queue"
+```
+
+## Тест 3: симулация на ESP32 pull
+
+```powershell
+$deviceToken = "ТВОЯ_DEVICE_TOKEN"
+Invoke-RestMethod `
+  -Uri "https://rs232-web-cloud-001-render.onrender.com/api/pull" `
+  -Headers @{ Authorization = "Bearer $deviceToken" }
+```
+
+Трябва да върне първата команда, ако има pending.
+
+## Тест 4: ACK
+
+В `sample_device_ack_ok.json` смени `command_id` с реалното ID, например `cmd-000001`.
+
+```powershell
+$deviceToken = "ТВОЯ_DEVICE_TOKEN"
+$url = "https://rs232-web-cloud-001-render.onrender.com/api/ack"
+$body = Get-Content .\sample_device_ack_ok.json -Raw
+
 Invoke-RestMethod `
   -Method Post `
-  -Uri "https://rs232-web-cloud-001-render.onrender.com/api/request-command" `
+  -Uri $url `
+  -Headers @{ Authorization = "Bearer $deviceToken" } `
   -ContentType "application/json" `
   -Body $body
 ```
 
-Очаква се `403` и `remote_commands_disabled`. Това е правилно.
+След ACK командата трябва да изчезне от pending.
 
 ## Важно
 
-Тази версия **не активира управление**. Тя само подготвя безопасната архитектура за бъдеща версия, където ESP32 сам ще пита cloud-а за чакащи команди.
+Това още не управлява реален уред. Това е cloud тест на бъдещия механизъм.
 
-`RS232_WEB_108` остава недокоснат.
+RS232_WEB_108 остава непроменен.

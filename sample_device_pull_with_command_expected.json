@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "has_command": true,
+  "command": {
+    "id": "cmd-000001",
+    "cmd": "set_next_no",
+    "status": "pending"
+  },
+  "pending_count": 1,
+  "commands_active": 1
+}
