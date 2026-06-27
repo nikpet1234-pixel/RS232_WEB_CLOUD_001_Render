@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RS232_WEB CLOUD Main UI StateMap</title>
+<title>RS232_WEB CLOUD Command Queue Disabled</title>
 <style>
 
 
@@ -349,9 +349,10 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   </div>
 
   <div class="cloudNotice mono">
-    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_005 UI_StateMap: JSON параметрите управляват съответните бутони/индикации. HOLD/LOOP/TRIG са състояние от уреда; Cloud Auto Refresh е отделна локална функция.
+    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_006 CommandQueue_DISABLED: JSON параметрите управляват UI състоянията. Добавена е структура за бъдещи команди, но command queue е заключен: allow_remote_commands=0.
     <div class="cloudControls">
       <button id="btnCloudAuto" class="smallBtn cloud-auto-off" title="Локално обновяване на страницата, не команда към уреда">Cloud Auto Refresh: OFF</button>
+      <span class="apiBadge mono warnBg" id="cmdQueueInfo" title="Future command queue status">CMD QUEUE: DISABLED</span>
       <span class="apiBadge mono">Remote commands: <b id="cmdModeInfo">OFF</b></span>
       <span class="apiBadge mono">UI map: <b>JSON → button/state</b></span>
       <span class="apiBadge mono" id="verifyInfo">VERIFY: ---</span>
@@ -573,7 +574,9 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     articles:new Set(),
     timer:null,
     pollMs:2500,
-    allowRemoteCommands:false
+    allowRemoteCommands:false,
+    commandQueueEnabled:false,
+    pendingCommands:0
   };
 
   function toast(msg){
@@ -585,7 +588,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     el._t=setTimeout(()=>el.classList.remove('show'), 2800);
   }
 
-  function localOnly(msg){ toast(msg || 'CLOUD_005: дистанционните команди са изключени. Промяната е само визуална/локална.'); }
+  function localOnly(msg){ toast(msg || 'CLOUD_006: дистанционните команди са изключени. Промяната е само визуална/локална.'); }
 
   function pick(d, ...ks){
     for(const k of ks){ if(d && d[k]!==undefined && d[k]!==null && d[k] !== '') return d[k]; }
@@ -621,7 +624,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       h1: phase(d,'l1','h','h1','H1','l1_l','L1_L') || phase(d,'l1','l'),
       h2: phase(d,'l2','h','h2','H2','l2_l','L2_L') || phase(d,'l2','l'),
       h3: phase(d,'l3','h','h3','H3','l3_l','L3_L') || phase(d,'l3','l'),
-      // CLOUD_005: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
+      // CLOUD_006: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
       uavg: pick(d,'uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'),
       iavg: pick(d,'iavr','iavg','i_avg','i_average','i','I','current'),
       psum: pick(d,'psum','p_sum','ptotal','p_total','p','P','power'),
@@ -667,6 +670,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     }
     setTxt('historyInfo', String(state.serverHistory.length || state.logRows.length || 0));
     setTxt('cmdModeInfo', state.allowRemoteCommands ? 'ON' : 'OFF');
+    setTxt('cmdQueueInfo', state.commandQueueEnabled ? ('CMD QUEUE: ON / '+state.pendingCommands) : 'CMD QUEUE: DISABLED');
   }
 
   function setMeasurement(m){
@@ -860,8 +864,37 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     toast(state.cloudAuto ? 'Cloud auto-refresh включен. Това не е команда към уреда.' : 'Cloud auto-refresh спрян. Уредът не е променен.');
     if(state.cloudAuto) readLatest(true);
   }
-  async function requestCommandDisabled(cmd){
-    localOnly('CLOUD_005: командите са изключени (allow_remote_commands=0). '+cmd+' няма да се изпрати към уреда.');
+  async function refreshCommandQueueStatus(){
+    try{
+      const r=await fetch('/api/command-queue', {cache:'no-store'});
+      if(!r.ok) return;
+      const j=await r.json();
+      state.commandQueueEnabled = !!Number(j.command_queue_enabled || 0);
+      state.pendingCommands = Number(j.pending_count || 0);
+      updateHeader();
+    }catch(e){}
+  }
+
+  async function requestCommandDisabled(cmd, payload){
+    const body = { cmd, value: payload || null, requested_at: new Date().toISOString(), source: 'cloud_ui' };
+    try{
+      const r=await fetch('/api/request-command', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)
+      });
+      const j=await r.json().catch(()=>({}));
+      if(r.status===403 && j.error==='remote_commands_disabled'){
+        toast('CLOUD_006: командата '+cmd+' НЕ е записана. allow_remote_commands=0.');
+      } else if(!r.ok){
+        toast('Командата не е приета: HTTP '+r.status);
+      } else {
+        toast('Командата е приета в queue.');
+      }
+      refreshCommandQueueStatus();
+    }catch(e){
+      localOnly('CLOUD_006: command endpoint недостъпен. '+cmd+' няма да се изпрати към уреда.');
+    }
   }
 
   function bind(){
@@ -895,7 +928,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   }
 
   window.addEventListener('load',()=>{
-    bind(); updateHeader('START / CMD OFF'); updatePills(); renderLogRows();
+    bind(); updateHeader('START / CMD OFF'); updatePills(); renderLogRows(); refreshCommandQueueStatus();
     readLatest(true).then(()=>readHistory());
     state.timer=setInterval(()=>{ if(state.cloudAuto && !state.cloudPause) readLatest(true); }, state.pollMs);
   });

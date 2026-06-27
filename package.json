@@ -1,7 +1,7 @@
 {
-  "name": "rs232-web-cloud-005-ui-state-map",
+  "name": "rs232-web-cloud-006-command-queue-disabled",
   "version": "1.0.0",
-  "description": "RS232_WEB Cloud Relay 005 - read-only UI state mapping for cloud Main page",
+  "description": "RS232_WEB Cloud Relay 006 - command queue scaffold disabled, read-only cloud Main page",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

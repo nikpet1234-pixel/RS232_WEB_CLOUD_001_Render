@@ -10,7 +10,12 @@ const PORT = process.env.PORT || 10000;
 const DEVICE_TOKEN = process.env.DEVICE_TOKEN || '';
 const VIEW_TOKEN = process.env.VIEW_TOKEN || '';
 const HISTORY_LIMIT = Math.max(1, Math.min(Number(process.env.HISTORY_LIMIT || 100), 1000));
-const ALLOW_REMOTE_COMMANDS = false; // CLOUD_005 remains read-only by design; UI state mapping only.
+const ALLOW_REMOTE_COMMANDS = false; // CLOUD_006: command queue scaffold exists, but remote commands are disabled by design.
+const COMMAND_QUEUE_ENABLED = false;
+const COMMAND_QUEUE_LIMIT = Math.max(1, Math.min(Number(process.env.COMMAND_QUEUE_LIMIT || 20), 100));
+let commandQueue = [];
+let commandSeq = 0;
+let ackHistory = [];
 
 let latest = null;
 let history = [];
@@ -18,8 +23,8 @@ let pushCount = 0;
 let bootTime = new Date().toISOString();
 
 const UI_STATE_MAP = {
-  service: 'RS232_WEB_CLOUD_005_UI_StateMap',
-  mode: 'read-only; remote commands disabled',
+  service: 'RS232_WEB_CLOUD_006_CommandQueue_DISABLED',
+  mode: 'read-only; command queue disabled; remote commands disabled',
   mapping: [
     { json: 'hold', ui: 'HOLD button color/text', values: '0=normal/STOP, 1=red/HOLD RUN', action: 'read-only indication' },
     { json: 'loop_running', ui: 'Start/Stop Loop button color/text + Loop status', values: '0=Start Loop/OFF, 1=Stop Loop/ON', action: 'read-only indication' },
@@ -108,7 +113,7 @@ function normalizePayload(body, req) {
     h2: cleanValue(nestedPhase(b, 'l2', 'h', ['h2','H2','l2_l','L2_L']) || nestedPhase(b, 'l2', 'l', ['l2','L2'])),
     h3: cleanValue(nestedPhase(b, 'l3', 'h', ['h3','H3','l3_l','L3_L']) || nestedPhase(b, 'l3', 'l', ['l3','L3'])),
 
-    // Aggregates are accepted from the device. CLOUD_004 does not calculate them when missing.
+    // Aggregates are accepted from the device. CLOUD_006 does not calculate them when missing.
     uavg: cleanValue(firstDefined(b, ['uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'])),
     iavg: cleanValue(firstDefined(b, ['iavr','iavg','i_avg','i_average','i','I','current'])),
     psum: cleanValue(firstDefined(b, ['psum','p_sum','ptotal','p_total','p','P','power'])),
@@ -163,17 +168,79 @@ app.get('/api/history', requireViewTokenIfSet, (req, res) => {
   res.json({ ok:true, history: history.slice(-limit), history_count: history.length, limit, allow_remote_commands: 0, state_model: 'rs232_web_cloud_state_v1' });
 });
 
-// Future command queue endpoints are intentionally present but disabled in CLOUD_004.
+
+
+
+const FUTURE_COMMAND_MAP = {
+  service: 'RS232_WEB_CLOUD_006_CommandQueue_DISABLED',
+  command_queue_enabled: 0,
+  allow_remote_commands: 0,
+  policy: 'No command is stored, queued, pulled, or acknowledged while allow_remote_commands=0.',
+  future_allowed_first_stage: [
+    { cmd:'set_next_no', fields:['value'], note:'Future soft setting only; disabled now.' },
+    { cmd:'set_article', fields:['value'], note:'Future soft setting only; disabled now.' },
+    { cmd:'set_trigger', fields:['parameter','by','threshold','tolerance_pct','autostop','enabled'], note:'Future soft trigger setup only; disabled now.' },
+    { cmd:'set_cloud_note', fields:['value'], note:'Future display-only note; disabled now.' }
+  ],
+  forbidden_in_cloud: ['sdtools','settings','firmware_update','file_read','file_write','api_read','loop_start','loop_stop','hold_toggle','print','delete_log']
+};
+function commandSummary(){
+  return {
+    ok:true,
+    service:'RS232_WEB_CLOUD_006_CommandQueue_DISABLED',
+    command_queue_enabled: 0,
+    allow_remote_commands: 0,
+    pending_count: commandQueue.length,
+    ack_count: ackHistory.length,
+    command_seq: commandSeq,
+    note:'Command queue scaffold is present but disabled. No commands are stored.'
+  };
+}
+
+// CLOUD_006: Future command queue endpoints are present, but intentionally disabled.
+// This lets the UI and ESP32-side design be tested safely before any device control exists.
 app.post('/api/request-command', requireViewTokenIfSet, (req, res) => {
-  res.status(403).json({ ok:false, error:'remote_commands_disabled', allow_remote_commands: 0 });
+  const attempted = cleanObj(req.body || {});
+  res.status(403).json({
+    ok:false,
+    error:'remote_commands_disabled',
+    queued:false,
+    stored:false,
+    allow_remote_commands: 0,
+    command_queue_enabled: 0,
+    attempted_command: attempted,
+    pending_count: commandQueue.length,
+    note:'CLOUD_006 does not store commands. Enablement must be a later explicit version.'
+  });
 });
 app.get('/api/pull', requireDeviceToken, (req, res) => {
-  res.json({ ok:true, has_command:false, command:null, allow_remote_commands: 0, note:'command queue disabled in CLOUD_005' });
+  res.json({
+    ok:true,
+    has_command:false,
+    command:null,
+    allow_remote_commands: 0,
+    command_queue_enabled: 0,
+    pending_count: 0,
+    note:'command queue disabled in CLOUD_006'
+  });
 });
 app.post('/api/ack', requireDeviceToken, (req, res) => {
-  res.status(403).json({ ok:false, error:'remote_commands_disabled', allow_remote_commands: 0 });
+  const attempted = cleanObj(req.body || {});
+  res.status(403).json({
+    ok:false,
+    error:'remote_commands_disabled',
+    ack_stored:false,
+    allow_remote_commands: 0,
+    command_queue_enabled: 0,
+    attempted_ack: attempted
+  });
 });
-
+app.get('/api/command-queue', requireViewTokenIfSet, (req, res) => {
+  res.json({ ...commandSummary(), pending: [] });
+});
+app.get('/api/command-map', requireViewTokenIfSet, (req, res) => {
+  res.json({ ok:true, command_map: FUTURE_COMMAND_MAP });
+});
 
 app.get('/api/state-map', requireViewTokenIfSet, (req, res) => {
   res.json({ ok:true, allow_remote_commands: 0, state_model: 'rs232_web_cloud_state_v1', ui_state_map: UI_STATE_MAP });
@@ -182,7 +249,7 @@ app.get('/api/state-map', requireViewTokenIfSet, (req, res) => {
 app.get('/health', (req, res) => {
   res.json({
     ok:true,
-    service:'RS232_WEB_CLOUD_005_UI_StateMap',
+    service:'RS232_WEB_CLOUD_006_CommandQueue_DISABLED',
     boot_time: bootTime,
     now: nowIso(),
     has_latest: !!latest,
@@ -193,7 +260,10 @@ app.get('/health', (req, res) => {
     view_protected: !!VIEW_TOKEN,
     allow_remote_commands: 0,
     state_model: 'rs232_web_cloud_state_v1',
-    ui_state_map: 'v1'
+    ui_state_map: 'v1',
+    command_queue_enabled: 0,
+    pending_commands: commandQueue.length,
+    ack_count: ackHistory.length
   });
 });
 
@@ -207,5 +277,5 @@ function forbidden(req, res) {
 app.use((req, res) => res.status(404).json({ ok:false, error:'Not found' }));
 
 app.listen(PORT, () => {
-  console.log(`RS232_WEB_CLOUD_005_UI_StateMap listening on ${PORT}`);
+  console.log(`RS232_WEB_CLOUD_006_CommandQueue_DISABLED listening on ${PORT}`);
 });

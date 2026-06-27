@@ -1,0 +1,3 @@
+{
+  "expected": "GET /api/pull returns has_command=false while command queue is disabled."
+}

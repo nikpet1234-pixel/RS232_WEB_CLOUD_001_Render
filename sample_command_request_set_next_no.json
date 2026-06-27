@@ -1,0 +1,6 @@
+{
+  "cmd": "set_next_no",
+  "value": "000130",
+  "source": "cloud_ui_test",
+  "note": "This is intentionally rejected in CLOUD_006 because allow_remote_commands=0."
+}

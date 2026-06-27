@@ -1,42 +1,32 @@
-RS232_WEB_CLOUD_005_UI_StateMap
-================================
+RS232_WEB_CLOUD_006_CommandQueue_DISABLED
+==========================================
 
 Дата: 2026-06-27
 Тип: cloud-only версия. RS232_WEB_108 firmware не е променян.
 
-Основна цел:
-- Фиксира връзката JSON поле → UI бутон/индикация.
-- Разделя реалното DEVICE състояние от локалните функции на cloud страницата.
-- Премахва подвеждащото поведение, при което Start/Stop Loop сменяше цвета си като локален auto-refresh.
+Ново:
+- Добавена е структура за бъдеща command queue архитектура.
+- Добавени endpoints:
+  - POST /api/request-command
+  - GET /api/pull
+  - POST /api/ack
+  - GET /api/command-queue
+  - GET /api/command-map
+- Всички команди са заключени: allow_remote_commands=0, command_queue_enabled=0.
+- При опит за команда от UI server-ът връща remote_commands_disabled и не записва нищо.
+- В UI е добавен badge CMD QUEUE: DISABLED.
 
-Ново в UI:
-- Добавен е отделен бутон: Cloud Auto Refresh.
-- Start/Stop Loop вече следва само JSON полето loop_running.
-- HOLD вече следва само JSON полето hold.
-- Trigger status следва trigger_state / trigger_hit / trigger_value.
-- VERIFY badge следва verified.
-- Добавен е видим UI State Map панел.
-- При натискане на DEVICE бутони се показва allow_remote_commands=0, без да се сменя състоянието им локално.
+Запазено от 005:
+- Визуална база от RS232_WEB_108 Main страница.
+- Правилен JSON field → UI state mapping.
+- HOLD следва hold.
+- LOOP следва loop_running.
+- Trigger следва trigger_state / trigger_hit.
+- VERIFY следва verified.
+- Cloud Auto Refresh остава отделен от реалния DEVICE LOOP.
 
-Ново в server.js:
-- service name: RS232_WEB_CLOUD_005_UI_StateMap
-- Добавен е GET /api/state-map.
-- /health връща ui_state_map: v1.
-- Command endpoints остават заключени.
-
-Запазено:
-- POST /api/push остава защитен с DEVICE_TOKEN.
-- VIEW_TOKEN остава опционален за гледане.
+Сигурност:
 - Няма tunnel към ESP32.
-- Няма SD Tools, Settings, Diagnostics, FFT, директни команди към уреда.
-
-Тестови payload файлове:
-- sample_payload_basic.json
-- sample_payload_full_state.json
-- sample_payload_trigger_hit.json
-- sample_payload_loop_running.json
-
-Очаквани тестове:
-- full_state: HOLD нормален, LOOP OFF, TRIG OK.
-- trigger_hit: HOLD червен, TRIG HIT, LOOP OFF.
-- loop_running: LOOP активен, HOLD нормален, TRIG ARMED.
+- Няма SD Tools / Settings / Diagnostics.
+- Няма директни API команди към уреда.
+- POST /api/push остава защитен с DEVICE_TOKEN.
