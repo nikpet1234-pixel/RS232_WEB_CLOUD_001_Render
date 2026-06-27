@@ -325,7 +325,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   <div class="deviceHeader">
     <div>
       <h2 id="deviceName">RS232_WEB CLOUD MONITOR</h2>
-      <div class="mono muted" style="margin-top:4px;">Device: <span id="deviceId">waiting for cloud data</span> <span class="cloudBadge">CLOUD READ-ONLY</span></div>
+      <div class="mono muted" style="margin-top:4px;">Device: <span id="deviceId">waiting for cloud data</span> <span class="cloudBadge">CLOUD READ-ONLY</span> <span class="cloudBadge">STATE MODEL 004</span></div>
     </div>
     <div class="apiStatusLine topStatus">
       <span class="apiBadge mono">WiFi: <b id="wifiInfo">CLOUD</b></span>
@@ -338,7 +338,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   </div>
 
   <div class="cloudNotice mono">
-    Cloud-only UI по визуална база от RS232_WEB_108. Няма tunnel към ESP32. Няма SD Tools, Settings, FFT, Diagnostics или дистанционни команди.
+    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_004 StateModel: показва само стойности, изпратени от уреда; не прави рискови локални калкулации; дистанционните команди са изключени.
   </div>
 
   <div class="tabs">
@@ -539,7 +539,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 (function(){
   'use strict';
   const $ = (id)=>document.getElementById(id);
-  const fmtDash = (v)=> (v===undefined || v===null || v==='') ? '-' : String(v);
+  const fmtDash = (v)=> (v===undefined || v===null || v==='') ? '---' : String(v);
   const asNum = (v)=>{ const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
   const esc = (s)=>String(s ?? '').replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const state = {
@@ -547,11 +547,12 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     latestSeq:0,
     logRows:[],
     serverHistory:[],
-    loop:false,
-    hold:false,
+    loop:false,       // local cloud auto-refresh only
+    hold:false,       // local pause only, unless device sends hold state
     articles:new Set(),
     timer:null,
-    pollMs:2500
+    pollMs:2500,
+    allowRemoteCommands:false
   };
 
   function toast(msg){
@@ -560,44 +561,73 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     el.textContent=msg;
     el.classList.add('show');
     clearTimeout(el._t);
-    el._t=setTimeout(()=>el.classList.remove('show'), 2400);
+    el._t=setTimeout(()=>el.classList.remove('show'), 2800);
   }
 
-  function localOnly(msg){ toast(msg || 'Cloud read-only режим: тази функция не изпраща команди към уреда.'); }
+  function localOnly(msg){ toast(msg || 'CLOUD_004: дистанционните команди са изключени. Промяната е само визуална/локална.'); }
 
+  function pick(d, ...ks){
+    for(const k of ks){ if(d && d[k]!==undefined && d[k]!==null && d[k] !== '') return d[k]; }
+    return '';
+  }
+  function phase(d, ph, field, ...flatAliases){
+    const obj = d?.[ph] || d?.[ph.toUpperCase()] || {};
+    return pick(obj, field, field.toUpperCase()) || pick(d, ph+'_'+field, ph.toUpperCase()+'_'+field, ph+field, ph.toUpperCase()+field, ...flatAliases);
+  }
+  function boolLike(v){
+    if(v===true || v===1) return true;
+    const s=String(v ?? '').toLowerCase().trim();
+    return s==='1' || s==='true' || s==='yes' || s==='on' || s==='run' || s==='running';
+  }
   function normalize(raw){
     raw = raw || {};
     const d = raw.latest || raw.measurement || raw.data || raw;
-    const pick=(...ks)=>{ for(const k of ks){ if(d[k]!==undefined && d[k]!==null && d[k] !== '') return d[k]; } return ''; };
+    const rawState = d.raw_state || d;
     const obj={
-      device: pick('device','deviceName','type') || 'RS232_WEB',
-      version: pick('version','fw','firmware') || '108',
-      no: pick('no','nextNo','serial','number'),
-      article: pick('article','art'),
-      time: pick('time','timestamp','datetime','received_at','receivedAt'),
-      status: pick('status','triggerStatus') || 'OK',
-      freq: pick('freq','frequency','freqHz'),
-      u1: pick('u1','U1','l1_u'), u2: pick('u2','U2','l2_u'), u3: pick('u3','U3','l3_u'),
-      i1: pick('i1','I1','l1_i'), i2: pick('i2','I2','l2_i'), i3: pick('i3','I3','l3_i'),
-      p1: pick('p1','P1','l1_p'), p2: pick('p2','P2','l2_p'), p3: pick('p3','P3','l3_p'),
-      uavg: pick('uavg','u','U','voltage'),
-      iavg: pick('iavg','i','I','current'),
-      psum: pick('psum','p','P','power'),
-      h1: pick('h1','H1'), h2: pick('h2','H2'), h3: pick('h3','H3'),
-      activePhases: pick('activePhases','phases') || 'L1,L2,L3',
-      uMode: pick('uMode','uDisplayMode') || (($('uDisplayMode')?.value === 'line') ? 'line' : 'phase'),
-      source: pick('source') || 'cloud'
+      schema: pick(d,'schema','state_model') || 'rs232_web_cloud_state_v1',
+      device: pick(d,'device','deviceName','type') || 'RS232_WEB',
+      version: pick(d,'version','fw','firmware') || '108',
+      no: pick(d,'no','serial','number'),
+      next_no: pick(d,'next_no','nextNo','nextno') || pick(d,'no','serial','number'),
+      article: pick(d,'article','art'),
+      time: pick(d,'time','timestamp','datetime','received_at','receivedAt'),
+      status: pick(d,'status','state') || 'OK',
+      freq: pick(d,'freq','frequency','freqHz','hz'),
+      u1: phase(d,'l1','u','u1','U1'), u2: phase(d,'l2','u','u2','U2'), u3: phase(d,'l3','u','u3','U3'),
+      i1: phase(d,'l1','i','i1','I1'), i2: phase(d,'l2','i','i2','I2'), i3: phase(d,'l3','i','i3','I3'),
+      p1: phase(d,'l1','p','p1','P1'), p2: phase(d,'l2','p','p2','P2'), p3: phase(d,'l3','p','p3','P3'),
+      h1: phase(d,'l1','h','h1','H1','l1_l','L1_L') || phase(d,'l1','l'),
+      h2: phase(d,'l2','h','h2','H2','l2_l','L2_L') || phase(d,'l2','l'),
+      h3: phase(d,'l3','h','h3','H3','l3_l','L3_L') || phase(d,'l3','l'),
+      // CLOUD_004: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
+      uavg: pick(d,'uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'),
+      iavg: pick(d,'iavr','iavg','i_avg','i_average','i','I','current'),
+      psum: pick(d,'psum','p_sum','ptotal','p_total','p','P','power'),
+      activePhases: pick(d,'activePhases','active_phases','phases') || 'L1,L2,L3',
+      uMode: pick(d,'uMode','u_mode','uDisplayMode') || (($('uDisplayMode')?.value === 'line') ? 'line' : 'phase'),
+      source: pick(d,'source') || 'cloud',
+      trigger_enabled: pick(d,'trigger_enabled','triggerEnabled','trig_enabled','trigEnabled'),
+      trigger_parameter: pick(d,'trigger_parameter','triggerParameter','trig_param','trigParam','selection','izbor'),
+      trigger_by: pick(d,'trigger_by','triggerBy','trig_by','trigBy'),
+      trigger_threshold: pick(d,'trigger_threshold','triggerThreshold','target'),
+      trigger_tolerance_pct: pick(d,'trigger_tolerance_pct','triggerTolerancePct','tolPct','tolerance_pct'),
+      trigger_mode: pick(d,'trigger_mode','triggerMode','mode'),
+      trigger_value: pick(d,'trigger_value','triggerValue','trigVal'),
+      trigger_state: pick(d,'trigger_state','triggerState','triggerStatus','trigStatus'),
+      trigger_hit: pick(d,'trigger_hit','triggerHit','trigHit'),
+      autostop: pick(d,'autostop','autoStop'),
+      hold: pick(d,'hold','hold_state','holdState'),
+      loop_running: pick(d,'loop_running','loopRunning','loop','loop_state'),
+      verified: pick(d,'verified','verify','verify_ok'),
+      allow_remote_commands: Number(pick(d,'allow_remote_commands','allowRemoteCommands') || 0),
+      raw_state: rawState
     };
-    // If only per-phase values exist, calculate aggregates for display.
-    const nums=(a,b,c)=>[asNum(a),asNum(b),asNum(c)].filter(Number.isFinite);
-    if(!obj.uavg){ const a=nums(obj.u1,obj.u2,obj.u3); if(a.length) obj.uavg=(a.reduce((x,y)=>x+y,0)/a.length).toFixed(3); }
-    if(!obj.iavg){ const a=nums(obj.i1,obj.i2,obj.i3); if(a.length) obj.iavg=(a.reduce((x,y)=>x+y,0)/a.length).toFixed(3); }
-    if(!obj.psum){ const a=nums(obj.p1,obj.p2,obj.p3); if(a.length) obj.psum=(a.reduce((x,y)=>x+y,0)).toFixed(3); }
     return obj;
   }
 
   function setTxt(id,v){ const el=$(id); if(el) el.textContent=fmtDash(v); }
   function setVal(id,v){ const el=$(id); if(el && document.activeElement !== el && v!==undefined && v!==null && v!=='') el.value=String(v); }
+  function setSelect(id,v){ const el=$(id); if(!el || document.activeElement===el || v===undefined || v===null || v==='') return; const val=String(v); if([...el.options].some(o=>o.value===val)) el.value=val; }
 
   function updateHeader(apiStatus){
     setTxt('deviceName','RS232_WEB CLOUD MONITOR');
@@ -606,13 +636,19 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     setTxt('wifiInfo','CLOUD');
     setTxt('rsInfo','READ-ONLY');
     setTxt('sdInfo','NO SD ACCESS');
-    setTxt('rtcInfo', c?.time || '-');
-    const cs=$('cloudState'); if(cs){ cs.textContent = apiStatus || (c ? 'ONLINE' : 'NO DATA'); cs.className='apiBadge mono ' + (c ? 'okBg' : 'warnBg'); }
+    setTxt('rtcInfo', c?.time || '---');
+    const cs=$('cloudState');
+    if(cs){
+      const txt = apiStatus || (c ? `ONLINE / CMD OFF` : 'NO DATA');
+      cs.textContent = txt;
+      cs.className='apiBadge mono ' + (c ? 'okBg' : 'warnBg');
+    }
     setTxt('historyInfo', String(state.serverHistory.length || state.logRows.length || 0));
   }
 
   function setMeasurement(m){
     state.current = m;
+    state.allowRemoteCommands = !!Number(m.allow_remote_commands || 0);
     if(m.article) state.articles.add(String(m.article));
     renderArticleList();
 
@@ -622,15 +658,21 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     setTxt('h1', m.h1); setTxt('h2', m.h2); setTxt('h3', m.h3); setTxt('freqHz', m.freq);
     setTxt('lastRead', m.time || new Date().toLocaleString());
     setVal('article', m.article);
-    if(m.no) setVal('nextNo', m.no);
+    setVal('nextNo', m.next_no || m.no);
+    setSelect('izbor', m.trigger_parameter);
+    setSelect('trigBy', m.trigger_by);
+    setVal('target', m.trigger_threshold);
+    setVal('tolPct', m.trigger_tolerance_pct);
+    setSelect('autoStop', m.autostop);
+    if(m.uMode) setSelect('uDisplayMode', m.uMode);
     updatePills();
     updateHeader();
   }
 
   function selectedValue(){
     const m=state.current || {};
-    const sel=$('izbor')?.value || 'U';
-    const trig=$('trigBy')?.value || 'CALC';
+    const sel=$('izbor')?.value || m.trigger_parameter || 'U';
+    const trig=$('trigBy')?.value || m.trigger_by || 'CALC';
     const map={
       U:{CALC:m.uavg,L1:m.u1,L2:m.u2,L3:m.u3},
       I:{CALC:m.iavg,L1:m.i1,L2:m.i2,L3:m.i3},
@@ -640,22 +682,33 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   }
 
   function updatePills(){
-    const target=asNum($('target')?.value);
-    const tol=asNum($('tolPct')?.value);
-    const val=asNum(selectedValue());
+    const m=state.current || {};
+    const target=asNum($('target')?.value || m.trigger_threshold);
+    const tol=asNum($('tolPct')?.value || m.trigger_tolerance_pct);
+    const deviceTrigValue = m.trigger_value;
+    const selected = selectedValue();
+    const val=asNum(deviceTrigValue || selected);
     const lo=Number.isFinite(target) && Number.isFinite(tol) ? target*(1-tol/100) : NaN;
     const hi=Number.isFinite(target) && Number.isFinite(tol) ? target*(1+tol/100) : NaN;
-    setTxt('pillRange', Number.isFinite(lo) ? `${lo.toFixed(3)} ... ${hi.toFixed(3)}` : '-');
-    setTxt('trigVal', Number.isFinite(val) ? val.toFixed(4) : fmtDash(selectedValue()));
-    setTxt('trigAuto', $('autoStop')?.value || 'true');
-    let st='-';
-    if(Number.isFinite(lo) && Number.isFinite(hi) && Number.isFinite(val)) st=(val>=lo && val<=hi) ? 'OK' : 'OUT';
+    setTxt('pillRange', Number.isFinite(lo) ? `${lo.toFixed(3)} ... ${hi.toFixed(3)}` : '---');
+    setTxt('trigVal', deviceTrigValue || (Number.isFinite(val) ? val.toFixed(4) : selected));
+    setTxt('trigAuto', $('autoStop')?.value || m.autostop || '---');
+
+    let st = m.trigger_state || '---';
+    // Only as visual fallback when the device did not send trigger_state and the local inputs are sufficient.
+    if(st==='---' && Number.isFinite(lo) && Number.isFinite(hi) && Number.isFinite(val)) st=(val>=lo && val<=hi) ? 'OK' : 'OUT';
     setTxt('trigStatus', st);
-    const ts=$('trigStatus'); if(ts){ ts.className = 'v mono ' + (st==='OK' ? 'ok' : (st==='OUT' ? 'bad' : '')); }
-    setTxt('loopStatus', state.loop ? 'ON' : 'OFF');
-    const ls=$('loopStatus'); if(ls){ ls.className = state.loop ? 'ok' : 'bad'; }
+    const ts=$('trigStatus'); if(ts){ ts.className = 'v mono ' + (String(st).toUpperCase().includes('OK') || String(st).toUpperCase().includes('ARMED') ? 'ok' : (String(st).toUpperCase().includes('OUT') || String(st).toUpperCase().includes('HIT') ? 'bad' : '')); }
+
+    const deviceLoopKnown = m.loop_running !== '' && m.loop_running !== undefined;
+    const shownLoop = deviceLoopKnown ? boolLike(m.loop_running) : state.loop;
+    setTxt('loopStatus', shownLoop ? 'ON' : 'OFF');
+    const ls=$('loopStatus'); if(ls){ ls.className = shownLoop ? 'ok' : 'bad'; }
     const lb=$('btnLoop'); if(lb){ lb.textContent= state.loop ? 'Stop Loop' : 'Start Loop'; lb.className = state.loop ? 'primary loop-on' : 'primary loop-off'; }
-    const hb=$('btnHold'); if(hb){ hb.textContent= state.hold ? 'HOLD RUN' : 'HOLD STOP'; hb.classList.remove('hold-run','hold-hold'); hb.classList.add(state.hold ? 'hold-hold' : 'hold-run'); }
+
+    const deviceHoldKnown = m.hold !== '' && m.hold !== undefined;
+    const shownHold = deviceHoldKnown ? boolLike(m.hold) : state.hold;
+    const hb=$('btnHold'); if(hb){ hb.textContent= shownHold ? 'HOLD RUN' : 'HOLD STOP'; hb.classList.remove('hold-run','hold-hold'); hb.classList.add(shownHold ? 'hold-hold' : 'hold-run'); }
   }
 
   async function readLatest(silent){
@@ -704,8 +757,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     state.logRows.unshift(m);
     if(state.logRows.length>200) state.logRows.length=200;
     renderLogRows();
-    const nn=$('nextNo'); if(nn){ const n=Number(nn.value||0); if(Number.isFinite(n)) nn.value=String(n+1); }
-    toast('Добавено само в cloud таблицата на браузъра.');
+    toast('Добавено само в локалната cloud таблица. Уредът не е променен.');
   }
 
   function renderLogRows(){
@@ -714,14 +766,15 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     state.logRows.forEach((m,idx)=>{
       const tr=document.createElement('tr');
       const noArt = `<div class="noArticleCell"><div class="rowNo">${esc(m.no || (idx+1))}</div><div class="rowArticle">${esc(m.article || '')}</div></div>`;
+      const trigText = m.trigger_state || m.status || '---';
       const cells=[
         noArt, esc(m.time), esc(m.device), esc(m.freq), esc(m.h1), esc(m.h2), esc(m.h3),
         esc(m.activePhases), esc(m.uMode), esc(m.u1), esc(m.u2), esc(m.u3),
         esc(m.i1), esc(m.i2), esc(m.i3), esc(m.p1), esc(m.p2), esc(m.p3),
-        esc(m.uavg), esc(m.iavg), esc(m.psum), esc(m.status),
+        esc(m.uavg), esc(m.iavg), esc(m.psum), esc(trigText),
         `<button class="smallBtn" data-act="copy" data-i="${idx}">Copy</button>`
       ];
-      tr.innerHTML=cells.map(c=>`<td>${c || '-'}</td>`).join('');
+      tr.innerHTML=cells.map(c=>`<td>${c || '---'}</td>`).join('');
       tbody.appendChild(tr);
     });
     setTxt('livePreviewNote', state.logRows.length ? `Показани записи: ${state.logRows.length}` : 'Няма записи в локалната таблица.');
@@ -744,20 +797,23 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   function exportCsv(){
     const rows=state.logRows.length?state.logRows:(state.current?[state.current]:[]);
     if(!rows.length){ toast('Няма данни за export.'); return; }
-    const cols=['no','article','time','device','version','freq','h1','h2','h3','activePhases','uMode','u1','u2','u3','i1','i2','i3','p1','p2','p3','uavg','iavg','psum','status'];
+    const cols=['no','next_no','article','time','device','version','freq','h1','h2','h3','activePhases','uMode','u1','u2','u3','i1','i2','i3','p1','p2','p3','uavg','iavg','psum','trigger_enabled','trigger_parameter','trigger_by','trigger_threshold','trigger_tolerance_pct','trigger_value','trigger_state','hold','loop_running','verified','status'];
     const csv=['sep=,', cols.join(',')].concat(rows.map(r=>cols.map(c=>'"'+String(r[c]??'').replace(/"/g,'""')+'"').join(','))).join('\r\n');
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
-    a.download='rs232_web_cloud_results.csv';
+    a.download='rs232_web_cloud_state_results.csv';
     a.click(); URL.revokeObjectURL(a.href);
   }
 
   function toggleLoop(){
     state.loop=!state.loop;
     updatePills();
-    toast(state.loop ? 'Cloud auto-refresh включен. Не се изпраща команда към уреда.' : 'Cloud auto-refresh спрян.');
+    toast(state.loop ? 'Cloud auto-refresh включен. Това не е команда към уреда.' : 'Cloud auto-refresh спрян. Уредът не е променен.');
     if(state.loop) readLatest(true);
+  }
+  async function requestCommandDisabled(cmd){
+    localOnly('CLOUD_004: командите са изключени (allow_remote_commands=0). '+cmd+' няма да се изпрати към уреда.');
   }
 
   function bind(){
@@ -765,15 +821,15 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     $('btnReadAdd')?.addEventListener('click',async()=>{ const m=await readLatest(false); if(m) addCurrentRow(); });
     $('btnAddLog')?.addEventListener('click',addCurrentRow);
     $('btnPrintCurrent')?.addEventListener('click',()=>window.print());
-    $('btnHold')?.addEventListener('click',()=>{ state.hold=!state.hold; updatePills(); toast(state.hold?'HOLD: автообновяването е паузирано локално.':'HOLD: автообновяването е разрешено.'); });
+    $('btnHold')?.addEventListener('click',()=>{ state.hold=!state.hold; updatePills(); requestCommandDisabled('HOLD'); });
     $('btnLoop')?.addEventListener('click',toggleLoop);
     $('btnExport')?.addEventListener('click',exportCsv);
     $('btnClearLog')?.addEventListener('click',()=>{ state.logRows=[]; renderLogRows(); toast('Изчистена е само локалната cloud таблица.'); });
-    $('btnArticleAdd')?.addEventListener('click',()=>{ const v=$('article')?.value.trim(); if(v){ state.articles.add(v); renderArticleList(); toast('Артикулът е добавен само в браузъра.'); } });
+    $('btnArticleAdd')?.addEventListener('click',()=>{ const v=$('article')?.value.trim(); if(v){ state.articles.add(v); renderArticleList(); requestCommandDisabled('set_article'); } });
     $('article')?.addEventListener('input', updateArticleAddButton);
-    $('btnNoPlus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||0)+1)); });
-    $('btnNoMinus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||1)-1)); });
-    ['target','tolPct','currentFactor','autoStop','izbor','trigBy','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',updatePills));
+    $('btnNoPlus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||0)+1)); requestCommandDisabled('set_next_no'); });
+    $('btnNoMinus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||1)-1)); requestCommandDisabled('set_next_no'); });
+    ['target','tolPct','currentFactor','autoStop','izbor','trigBy','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); if(['target','tolPct','autoStop','izbor','trigBy'].includes(id)) requestCommandDisabled('set_trigger'); }));
     document.querySelector('#logTable tbody')?.addEventListener('click',ev=>{
       const b=ev.target.closest('button[data-act="copy"]'); if(!b) return;
       const row=state.logRows[Number(b.dataset.i)];
@@ -789,7 +845,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   }
 
   window.addEventListener('load',()=>{
-    bind(); updateHeader('START'); updatePills(); renderLogRows();
+    bind(); updateHeader('START / CMD OFF'); updatePills(); renderLogRows();
     readLatest(true).then(()=>readHistory());
     state.timer=setInterval(()=>{ if(state.loop && !state.hold) readLatest(true); }, state.pollMs);
   });

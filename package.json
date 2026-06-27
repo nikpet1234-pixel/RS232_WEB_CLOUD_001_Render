@@ -1,7 +1,7 @@
 {
-  "name": "rs232-web-cloud-003-render-rs232-ui",
+  "name": "rs232-web-cloud-004-state-model",
   "version": "1.0.0",
-  "description": "RS232_WEB Cloud Relay 003 - read-only Render service with RS232_WEB_108-like Main UI",
+  "description": "RS232_WEB Cloud Relay 004 - read-only state model prepared for future synchronization",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
