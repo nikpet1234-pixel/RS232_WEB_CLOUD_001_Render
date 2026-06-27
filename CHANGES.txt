@@ -1,13 +1,12 @@
-RS232_WEB_CLOUD_002_Render_MainUI
+RS232_WEB_CLOUD_003_Render_RS232_UI
 
-Cloud-only changes:
-- New Main-style read-only monitoring page.
-- Added familiar buttons: READ/REFRESH, ADD, HOLD, NO+/NO-, EXPORT CSV, PRINT, CLEAR LOCAL.
-- Added locked visual buttons for LOOP START, LOOP STOP, SETTINGS.
-- Locked buttons do not call ESP32 and only show allow_remote_commands=0 warning.
-- Removed/omitted FFT, Settings, Diagnostics, SD Tools, SD file access.
-- POST /api/push remains protected by DEVICE_TOKEN.
-- GET / and JSON read endpoints remain optionally protected by VIEW_TOKEN.
-- /api/read, /api/loop, /api/command, /api/settings and /sdtools return 403 Forbidden.
-- History remains RAM-only.
-- RS232_WEB_108 firmware is not touched.
+- Cloud-only пакет. Firmware-ът RS232_WEB_108 НЕ се пипа.
+- Основната страница вече използва визуална база от реалния RS232_WEB_108 index.html.
+- Оставени са Main панелът, измервателните блокове U/I/P/L, основните бутони, Article/Next № и Log таблицата.
+- FFT, Settings, Diagnostics, SD Tools и директните API функции към уреда не се показват/не се използват.
+- POST /api/push остава защитен с DEVICE_TOKEN.
+- GET /, /api/latest и /api/history са read-only; VIEW_TOKEN е опционален.
+- /api/read, /api/loop, /api/hold, /api/settings, /sdtools, /diag и сродни адреси връщат 403 Forbidden.
+- Start Loop е само локален cloud auto-refresh, не команда към ESP32.
+- HOLD е само локална пауза на auto-refresh.
+- Add to Log / Clear / Export CSV работят само в браузърния/cloud изглед.

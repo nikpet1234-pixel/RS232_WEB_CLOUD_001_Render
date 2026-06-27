@@ -1,102 +1,103 @@
-# RS232_WEB_CLOUD_002_Render_MainUI
+# RS232_WEB_CLOUD_003_Render_RS232_UI
 
-Втора cloud-only версия за подпроекта **RS232_WEB_CLOUD / CLOUD_RELAY**.
+Това е **само cloud пакет** за Render. Не променя firmware-а на RS232_WEB_108.
 
-Тази версия НЕ променя firmware-а на RS232_WEB_108 и НЕ прави tunnel към локалното ESP32 WEB меню.
+## Цел
 
-## Основна цел
+Версия 003 използва реалната последна WEB страница от RS232_WEB_108 като визуална база, но я превръща в безопасен cloud read-only монитор.
 
-Cloud страницата да прилича повече на основната страница на уреда, но да остане безопасна:
+Запазени визуално:
 
-- само read-only мониторинг;
-- POST `/api/push` остава защитен с `DEVICE_TOKEN`;
-- няма дистанционни команди към ESP32;
-- няма SD Tools;
-- няма Settings;
-- няма FFT;
-- няма Diagnostics;
-- няма достъп до файлове от SD карта.
+- Main страницата
+- бутоните Read full, Read + Add, Add to Log, Print, HOLD, Start Loop
+- Article / Артикул
+- Next №
+- U / I / P / L блоковете
+- Log table
+- стилове, размери и разположение от RS232_WEB_108
 
-## Адреси
+Премахнати/неизползвани:
 
-```text
-GET  /              Main-style cloud страница
-POST /api/push      приемане на измерване, изисква DEVICE_TOKEN
-GET  /api/latest    последното измерване като JSON
-GET  /api/history   последните N измервания, само RAM
-GET  /health        проверка на услугата
-```
+- FFT
+- Settings
+- Diagnostics
+- SD Tools
+- SD файлов браузър
+- директни локални API функции към ESP32
 
-Опасните/локални адреси връщат `403 Forbidden`:
+## Безопасна логика
 
-```text
-/api/read
-/api/loop
-/api/command
-/api/settings
-/sdtools
-```
+Това НЕ е tunnel към ESP32.
 
-## Бутони на cloud страницата
-
-Работят локално в cloud страницата:
+Cloud услугата приема само данни, които ESP32 или компютър изпраща към:
 
 ```text
-READ / REFRESH   обновява последното измерване от /api/latest
-ADD              добавя текущото измерване в локалната таблица на браузъра
-HOLD             спира/пуска автоматичното обновяване
-NO+ / NO-        променя No само визуално/локално
-EXPORT CSV       сваля CSV от текущата таблица
-PRINT            печат на страницата
-CLEAR LOCAL      чисти само локалния изглед
+POST /api/push
 ```
 
-Заключени бутони:
+Този адрес остава защитен с:
 
 ```text
-LOOP START
-LOOP STOP
-SETTINGS
+DEVICE_TOKEN
 ```
 
-При натискане показват съобщение, че дистанционните команди са изключени:
+Страницата чете само:
+
+```text
+GET /api/latest
+GET /api/history
+```
+
+Дистанционните команди са изключени:
 
 ```text
 allow_remote_commands=0
 ```
 
-## Render Environment Variables
-
-Минимално:
+Следните адреси връщат `403 Forbidden`:
 
 ```text
-DEVICE_TOKEN=твоя-дълга-тайна-стойност
-HISTORY_LIMIT=50
+/api/read
+/api/loop
+/api/hold
+/api/command
+/api/settings
+/api/set
+/api/status
+/api/measurement
+/api/log
+/api/addlog
+/api/clearrows
+/sdtools
+/diag
+/embedded
 ```
 
-По желание:
+## Как работят бутоните в cloud страницата
 
 ```text
-VIEW_TOKEN=тайна-за-гледане
+Read full      -> чете /api/latest
+Read + Add     -> чете /api/latest и добавя ред в локалната таблица
+Add to Log     -> добавя текущото измерване в локалната cloud таблица
+Print          -> печат на страницата от браузъра
+HOLD STOP/RUN  -> локална пауза на auto-refresh
+Start Loop     -> локален auto-refresh през cloud, не команда към ESP32
+Clear table    -> чисти само локалния браузърен изглед
+Export results -> CSV от показаната таблица
+NO+ / NO-      -> локална промяна на Next №
 ```
 
-Ако `VIEW_TOKEN` липсва, страницата е публична read-only, но POST `/api/push` остава защитен с `DEVICE_TOKEN`.
+## Обновяване на съществуващия Render проект
 
-## Как да обновиш вече съществуващия Render проект
-
-Тъй като вече имаш работещ Render service:
-
-```text
-https://rs232-web-cloud-001-render.onrender.com/
-```
-
-можеш да обновиш същия GitHub repository с файловете от този пакет:
+Качи/замени в GitHub repository-то файловете от този пакет:
 
 ```text
 server.js
 package.json
+public/index.html
 sample_payload.json
 README_BG.md
+CHANGES.txt
 .gitignore
 ```
 
@@ -109,45 +110,37 @@ Render Dashboard
 → Deploy latest commit
 ```
 
-Ако страницата изглежда стара:
+Ако покаже старата страница:
 
 ```text
 Manual Deploy
 → Clear build cache & deploy
 ```
 
-## Локален тест от компютър
+## Environment Variables в Render
 
-```bash
-npm start
-```
-
-После отвори:
+Минимално трябва да остане:
 
 ```text
-http://localhost:3000/
+DEVICE_TOKEN=твоят-дълъг-таен-token
+HISTORY_LIMIT=100
 ```
 
-Тестово изпращане:
+`VIEW_TOKEN` е по желание.
 
-```bash
-curl -X POST http://localhost:3000/api/push \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer change-me-dev-token" \
-  --data @sample_payload.json
+Ако `VIEW_TOKEN` липсва, страницата се отваря свободно:
+
+```text
+https://rs232-web-cloud-001-render.onrender.com/
 ```
 
-Проверка:
+Ако `VIEW_TOKEN` е зададен, страницата ще иска:
 
-```bash
-curl http://localhost:3000/api/latest
-curl http://localhost:3000/api/history
-curl http://localhost:3000/health
+```text
+https://rs232-web-cloud-001-render.onrender.com/?view_token=твоят-view-token
 ```
 
-## PowerShell тест към твоя Render адрес
-
-Смени само `ТВОЯ_DEVICE_TOKEN`:
+## Тест от PowerShell
 
 ```powershell
 $token = "ТВОЯ_DEVICE_TOKEN"
@@ -156,13 +149,13 @@ $url = "https://rs232-web-cloud-001-render.onrender.com/api/push"
 $body = @{
   device  = "RS232_WEB"
   version = "108"
-  no      = "000124"
+  no      = "000123"
   article = "TR-250VA"
-  u       = "231.2"
-  i       = "0.462"
-  p       = "106.8"
-  freq    = "49.99"
-  time    = "2026-06-27 16:10:00"
+  u       = "230.1"
+  i       = "0.456"
+  p       = "104.9"
+  freq    = "49.98"
+  time    = "2026-06-27 15:42:10"
   status  = "OK"
 } | ConvertTo-Json
 
@@ -174,14 +167,12 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-След това отвори:
+После отвори:
 
 ```text
 https://rs232-web-cloud-001-render.onrender.com/
 ```
 
-## Важно за историята
+## Важно
 
-Историята все още е само RAM. При рестарт, redeploy или заспиване/събуждане на Render Free услугата може да се загуби.
-
-Това е нарочно за този етап. По-късно може да се добави постоянна история.
+RS232_WEB_108 остава недокоснат. Този пакет е само cloud relay + cloud UI.

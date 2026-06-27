@@ -1,14 +1,15 @@
 {
-  "name": "rs232-web-cloud-relay-mainui",
-  "version": "0.0.2",
-  "description": "Read-only cloud relay for RS232_WEB with Main UI style monitor",
+  "name": "rs232-web-cloud-003-render-rs232-ui",
+  "version": "1.0.0",
+  "description": "RS232_WEB Cloud Relay 003 - read-only Render service with RS232_WEB_108-like Main UI",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "check": "node --check server.js"
+    "start": "node server.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
   },
-  "license": "UNLICENSED"
+  "dependencies": {
+    "express": "^4.19.2"
+  }
 }
