@@ -1,10 +1,11 @@
 {
-  "name": "rs232-web-cloud-relay",
-  "version": "0.0.1",
-  "description": "Read-only cloud relay for RS232_WEB ESP32 measurements",
+  "name": "rs232-web-cloud-relay-mainui",
+  "version": "0.0.2",
+  "description": "Read-only cloud relay for RS232_WEB with Main UI style monitor",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "node --check server.js"
   },
   "engines": {
     "node": ">=20"
