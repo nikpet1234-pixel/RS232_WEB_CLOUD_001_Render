@@ -1,98 +1,180 @@
-# RS232_WEB_CLOUD_007_CommandQueue_ARMED
+# RS232_WEB_CLOUD_008_DevicePullAck_SIM
 
-Това е cloud-only версия. **RS232_WEB_108 firmware не е пипан.**
+Това е cloud-only версия за подпроекта **RS232_WEB_CLOUD / CLOUD_RELAY**.
 
-Версия 007 добавя реална, но контролирано заключена/отключваема опашка за бъдещи команди.
+База: `RS232_WEB_CLOUD_007_CommandQueue_ARMED`.
 
-## Главна идея
+## Цел на версия 008
 
-До 006 имахме само структура, която винаги отказва команди.
-
-В 007 вече може да се тества пълният поток:
+Да се тества бъдещият двупосочен цикъл **без ESP32 firmware**:
 
 ```text
 Cloud UI / PowerShell
 → POST /api/request-command
-→ командата влиза в RAM queue
+→ command queue
 
-ESP32 simulator / PowerShell
+симулиран ESP32 / PowerShell
 → GET /api/pull
-→ получава първата чакаща команда
+→ изпълнява командата локално / симулира изпълнение
+→ POST /api/ack със state
 
-ESP32 simulator / PowerShell
-→ POST /api/ack
-→ потвърждава изпълнение и командата излиза от pending
+Cloud
+→ премахва командата от pending queue
+→ записва ACK history
+→ ако ACK съдържа state, обновява /api/latest и страницата
 ```
 
-Но това се активира **само ако изрично го включиш в Render**.
+**RS232_WEB_108 firmware не се пипа.**
 
-## По подразбиране е безопасно изключено
+## Важно за безопасността
 
-Ако не добавиш специални Render Environment variables, `/health` ще покаже:
+По подразбиране командите остават изключени.
 
-```json
-{
-  "service": "RS232_WEB_CLOUD_007_CommandQueue_ARMED",
-  "allow_remote_commands": 0,
-  "command_queue_enabled": 0,
-  "command_token_configured": false,
-  "commands_active": 0
-}
-```
-
-В този режим командите пак се отказват.
-
-## Как се активира само за тест
-
-В Render → Environment добави:
+За активен command queue са нужни едновременно:
 
 ```text
 ALLOW_REMOTE_COMMANDS=1
 COMMAND_QUEUE_ENABLED=1
-COMMAND_TOKEN=друга-дълга-тайна-стойност
+COMMAND_TOKEN=дълга-тайна-стойност
+DEVICE_TOKEN=дълга-тайна-стойност
 ```
 
-`DEVICE_TOKEN` остава както досега и пази ESP32/device операциите.
+Ако някое липсва, `/api/request-command` няма да записва команди.
 
-`COMMAND_TOKEN` е отделен token за записване на команди от cloud UI или PowerShell.
-
-След промяна направи:
+## Token разделение
 
 ```text
-Manual Deploy → Deploy latest commit
+DEVICE_TOKEN   → използва се от уреда / симулирания уред:
+                 POST /api/push
+                 GET  /api/pull
+                 POST /api/ack
+
+COMMAND_TOKEN  → използва се за заявка на команда:
+                 POST /api/request-command
 ```
 
-После `/health` трябва да покаже:
+Така публичната страница не трябва да знае `DEVICE_TOKEN`.
+
+## Новото спрямо 007
+
+### 1. ACK може да обнови latest state
+
+В 007 `POST /api/ack` само записваше потвърждение.
+
+В 008, ако ACK съдържа обект `state`, cloud услугата го нормализира като ново състояние и обновява:
+
+```text
+GET /api/latest
+GET /
+GET /api/history
+```
+
+Пример:
 
 ```json
-"commands_active": 1
+{
+  "id": "cmd-000001",
+  "ok": true,
+  "message": "set_next_no accepted",
+  "state": {
+    "next_no": "000200",
+    "status": "COMMAND ACK OK"
+  }
+}
 ```
 
-## Защо има отделен COMMAND_TOKEN
+След това главната cloud страница трябва да покаже новия `next_no`.
 
-Страницата за наблюдение при теб се отваря публично без `VIEW_TOKEN`. Затова не е безопасно всеки посетител да може да записва команди.
-
-Затова:
+### 2. Нов endpoint за ACK история
 
 ```text
-POST /api/push              → DEVICE_TOKEN
-GET /api/pull               → DEVICE_TOKEN
-POST /api/ack               → DEVICE_TOKEN
-POST /api/request-command    → COMMAND_TOKEN
+GET /api/ack-history
 ```
 
-## Разрешени първи команди
+Връща последните ACK записи.
 
-В 007 са разрешени само меки настройки:
+### 3. PowerShell тестов сценарий
+
+Добавен е файл:
 
 ```text
-set_next_no
-set_article
-set_trigger
-set_cloud_note
+test_008_powershell_commands.txt
 ```
 
-Забранени засега:
+Той показва пълния тест:
+
+```text
+queue command → pull → ack → latest → command queue with ack history
+```
+
+## Deploy
+
+Качи всички файлове от ZIP-а в GitHub repository-то на cloud проекта.
+
+След това в Render:
+
+```text
+Manual Deploy
+→ Deploy latest commit
+```
+
+Ако виждаш стара версия:
+
+```text
+Manual Deploy
+→ Clear build cache & deploy
+```
+
+## Проверка след deploy
+
+Отвори:
+
+```text
+https://rs232-web-cloud-001-render.onrender.com/health
+```
+
+Очаква се:
+
+```json
+{
+  "service": "RS232_WEB_CLOUD_008_DevicePullAck_SIM",
+  "device_pull_ack_sim": "v1",
+  "ack_can_update_latest": true
+}
+```
+
+## Тестов ред
+
+1. В Render Environment включи временно:
+
+```text
+ALLOW_REMOTE_COMMANDS=1
+COMMAND_QUEUE_ENABLED=1
+COMMAND_TOKEN=твоя-команден-токен
+```
+
+2. Deploy latest commit.
+
+3. Използвай `test_008_powershell_commands.txt`.
+
+4. Провери:
+
+```text
+/api/command-queue?ack=1
+/api/ack-history
+/api/latest
+```
+
+5. След тест може пак да изключиш:
+
+```text
+ALLOW_REMOTE_COMMANDS=0
+COMMAND_QUEUE_ENABLED=0
+```
+
+## Забранени команди в този етап
+
+Все още не пускаме опасни действия:
 
 ```text
 loop_start
@@ -106,91 +188,15 @@ file_write
 firmware_update
 ```
 
-Тоест няма управление на цикъл, HOLD, SD карта, настройки или файлове.
+Разрешените тестови команди остават само:
 
-## Тест 1: queue изключена
-
-PowerShell:
-
-```powershell
-$commandToken = "ТВОЯ_COMMAND_TOKEN"
-$url = "https://rs232-web-cloud-001-render.onrender.com/api/request-command"
-$body = Get-Content .\sample_command_request_set_next_no.json -Raw
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri $url `
-  -Headers @{ Authorization = "Bearer $commandToken" } `
-  -ContentType "application/json" `
-  -Body $body
+```text
+set_next_no
+set_article
+set_trigger
+set_cloud_note
 ```
 
-Ако не си включил Render ENV, очаквано ще върне:
+## Бележка
 
-```json
-{
-  "ok": false,
-  "error": "remote_commands_disabled",
-  "queued": false,
-  "stored": false
-}
-```
-
-## Тест 2: queue активирана
-
-След като добавиш Render ENV и redeploy-неш, същата заявка трябва да върне:
-
-```json
-{
-  "ok": true,
-  "queued": true,
-  "stored": true,
-  "command": {
-    "id": "cmd-000001",
-    "cmd": "set_next_no",
-    "status": "pending"
-  }
-}
-```
-
-Провери queue:
-
-```powershell
-Invoke-RestMethod -Uri "https://rs232-web-cloud-001-render.onrender.com/api/command-queue"
-```
-
-## Тест 3: симулация на ESP32 pull
-
-```powershell
-$deviceToken = "ТВОЯ_DEVICE_TOKEN"
-Invoke-RestMethod `
-  -Uri "https://rs232-web-cloud-001-render.onrender.com/api/pull" `
-  -Headers @{ Authorization = "Bearer $deviceToken" }
-```
-
-Трябва да върне първата команда, ако има pending.
-
-## Тест 4: ACK
-
-В `sample_device_ack_ok.json` смени `command_id` с реалното ID, например `cmd-000001`.
-
-```powershell
-$deviceToken = "ТВОЯ_DEVICE_TOKEN"
-$url = "https://rs232-web-cloud-001-render.onrender.com/api/ack"
-$body = Get-Content .\sample_device_ack_ok.json -Raw
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri $url `
-  -Headers @{ Authorization = "Bearer $deviceToken" } `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-След ACK командата трябва да изчезне от pending.
-
-## Важно
-
-Това още не управлява реален уред. Това е cloud тест на бъдещия механизъм.
-
-RS232_WEB_108 остава непроменен.
+Това все още не е firmware интеграция. Това е симулация на бъдещото поведение на ESP32 чрез PowerShell.

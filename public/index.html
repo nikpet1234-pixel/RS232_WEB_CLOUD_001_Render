@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RS232_WEB CLOUD Command Queue ARMED</title>
+<title>RS232_WEB CLOUD Device Pull/Ack SIM</title>
 <style>
 
 
@@ -349,7 +349,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   </div>
 
   <div class="cloudNotice mono">
-    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_007 CommandQueue_ARMED: JSON параметрите управляват UI състоянията. Добавена е структура за бъдещи команди, но command queue се активира само с Render ENV: ALLOW_REMOTE_COMMANDS=1 + COMMAND_QUEUE_ENABLED=1 + COMMAND_TOKEN.
+    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_008 DevicePullAck_SIM: JSON параметрите управляват UI състоянията. Добавена е симулация на ESP32 pull/ack: request-command → /api/pull → /api/ack. ACK със state може да обнови последното cloud състояние.
     <div class="cloudControls">
       <button id="btnCloudAuto" class="smallBtn cloud-auto-off" title="Локално обновяване на страницата, не команда към уреда">Cloud Auto Refresh: OFF</button>
       <span class="apiBadge mono warnBg" id="cmdQueueInfo" title="Future command queue status">CMD QUEUE: DISABLED</span>
@@ -590,7 +590,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     el._t=setTimeout(()=>el.classList.remove('show'), 2800);
   }
 
-  function localOnly(msg){ toast(msg || 'CLOUD_007: командата не е записана; queue не е активна или няма COMMAND_TOKEN.'); }
+  function localOnly(msg){ toast(msg || 'CLOUD_008: командата не е записана; queue не е активна или няма COMMAND_TOKEN.'); }
 
   function pick(d, ...ks){
     for(const k of ks){ if(d && d[k]!==undefined && d[k]!==null && d[k] !== '') return d[k]; }
@@ -626,7 +626,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       h1: phase(d,'l1','h','h1','H1','l1_l','L1_L') || phase(d,'l1','l'),
       h2: phase(d,'l2','h','h2','H2','l2_l','L2_L') || phase(d,'l2','l'),
       h3: phase(d,'l3','h','h3','H3','l3_l','L3_L') || phase(d,'l3','l'),
-      // CLOUD_007: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
+      // CLOUD_008: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
       uavg: pick(d,'uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'),
       iavg: pick(d,'iavr','iavg','i_avg','i_average','i','I','current'),
       psum: pick(d,'psum','p_sum','ptotal','p_total','p','P','power'),
@@ -916,7 +916,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       const r=await fetch('/api/request-command', { method:'POST', headers, body:JSON.stringify(body) });
       const j=await r.json().catch(()=>({}));
       if(r.status===403 && j.error==='remote_commands_disabled'){
-        toast('CLOUD_007: командата '+cmd+' НЕ е записана. Queue не е активна.');
+        toast('CLOUD_008: командата '+cmd+' НЕ е записана. Queue не е активна.');
       } else if(r.status===401){
         localStorage.removeItem('rs232_web_command_token'); state.commandToken='';
         toast('Грешен или липсващ COMMAND_TOKEN.');
@@ -927,7 +927,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       }
       refreshCommandQueueStatus();
     }catch(e){
-      localOnly('CLOUD_007: command endpoint недостъпен. '+cmd+' няма да се изпрати към уреда.');
+      localOnly('CLOUD_008: command endpoint недостъпен. '+cmd+' няма да се изпрати към уреда.');
     }
   }
 

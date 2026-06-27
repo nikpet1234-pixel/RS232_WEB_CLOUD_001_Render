@@ -1,0 +1,7 @@
+{
+  "cmd": "set_next_no",
+  "payload": {
+    "value": "000200"
+  },
+  "source": "cloud_ui_test"
+}

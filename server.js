@@ -6,7 +6,7 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
-const SERVICE = 'RS232_WEB_CLOUD_007_CommandQueue_ARMED';
+const SERVICE = 'RS232_WEB_CLOUD_008_DevicePullAck_SIM';
 const STATE_MODEL = 'rs232_web_cloud_state_v1';
 const PORT = process.env.PORT || 10000;
 const DEVICE_TOKEN = process.env.DEVICE_TOKEN || '';
@@ -35,7 +35,7 @@ let ackHistory = [];
 
 const UI_STATE_MAP = {
   service: SERVICE,
-  mode: COMMANDS_ACTIVE ? 'command queue armed' : 'read-only / command queue not active',
+  mode: COMMANDS_ACTIVE ? 'device pull/ack simulation armed' : 'read-only / command queue not active',
   safety: 'Command requests require COMMAND_TOKEN; device pull/ack require DEVICE_TOKEN.',
   mapping: [
     { json: 'hold', ui: 'HOLD button color/text', values: '0=normal/STOP, 1=red/HOLD RUN', action: 'device state indication; command disabled unless queue is active and token is supplied' },
@@ -60,7 +60,7 @@ const COMMAND_MAP = {
   command_token_configured: !!COMMAND_TOKEN,
   commands_active: COMMANDS_ACTIVE ? 1 : 0,
   policy: COMMANDS_ACTIVE
-    ? 'Commands may be queued only with COMMAND_TOKEN. ESP32/device must pull with DEVICE_TOKEN and ack after local execution.'
+    ? 'Commands may be queued only with COMMAND_TOKEN. Device pull/ack simulation uses DEVICE_TOKEN. ACK may include a state object that updates the latest cloud state.'
     : 'Commands are not active unless ALLOW_REMOTE_COMMANDS=1, COMMAND_QUEUE_ENABLED=1, and COMMAND_TOKEN is configured.',
   allowed_first_stage: [
     { cmd:'set_next_no', fields:['value'], note:'Soft setting for next number.' },
@@ -234,7 +234,7 @@ function commandSummary(includeAck=false) {
     ack_count: ackHistory.length,
     command_seq: commandSeq,
     command_queue_limit: COMMAND_QUEUE_LIMIT,
-    note: COMMANDS_ACTIVE ? 'Command queue is armed. Commands require COMMAND_TOKEN.' : 'Command queue is present but not active.'
+    note: COMMANDS_ACTIVE ? 'Command queue is armed. Device pull/ack simulation is available with DEVICE_TOKEN.' : 'Command queue is present but not active.'
   };
   if (includeAck) base.ack_history = ackHistory.slice(-20);
   return base;
@@ -295,6 +295,7 @@ app.post('/api/ack', requireDeviceToken, (req, res) => {
   const idx = commandQueue.findIndex(c => c.id === id);
   if (idx < 0) return res.status(404).json({ ok:false, error:'command_not_found', command_id: id });
   const item = commandQueue.splice(idx, 1)[0];
+  const resultState = b.state && typeof b.state === 'object' ? cleanObj(b.state) : {};
   const ack = {
     id,
     cmd: item.cmd,
@@ -304,11 +305,31 @@ app.post('/api/ack', requireDeviceToken, (req, res) => {
     ack_at: nowIso(),
     ack_from: clientIp(req),
     original_command: item,
-    result_state: b.state && typeof b.state === 'object' ? cleanObj(b.state) : {}
+    result_state: resultState,
+    latest_updated_from_ack: false
   };
+
+  // CLOUD_008 addition: for simulation, ACK may carry a partial/full device state.
+  // This lets us test the full loop without ESP32 firmware yet:
+  // request-command -> device pull -> device ack with state -> cloud UI updates.
+  if (Object.keys(resultState).length) {
+    const merged = Object.assign({}, latest && latest.raw_state ? latest.raw_state : {}, resultState, {
+      source: 'command_ack',
+      last_command_id: id,
+      last_command: item.cmd,
+      last_command_ok: ack.ok,
+      last_command_message: ack.message || 'ACK state applied'
+    });
+    latest = normalizePayload(merged, req);
+    history.push(latest);
+    pushCount += 1;
+    while (history.length > HISTORY_LIMIT) history.shift();
+    ack.latest_updated_from_ack = true;
+  }
+
   ackHistory.push(ack);
   while (ackHistory.length > ACK_HISTORY_LIMIT) ackHistory.shift();
-  res.json({ ok:true, ack_stored:true, removed_from_pending:true, ack, pending_count: commandQueue.length, ack_count: ackHistory.length });
+  res.json({ ok:true, ack_stored:true, removed_from_pending:true, latest_updated_from_ack: ack.latest_updated_from_ack, ack, pending_count: commandQueue.length, ack_count: ackHistory.length, latest });
 });
 
 app.get('/api/command-queue', requireViewTokenIfSet, (req, res) => {
@@ -317,6 +338,11 @@ app.get('/api/command-queue', requireViewTokenIfSet, (req, res) => {
 });
 app.get('/api/command-map', requireViewTokenIfSet, (req, res) => {
   res.json({ ok:true, command_map: COMMAND_MAP });
+});
+
+app.get('/api/ack-history', requireViewTokenIfSet, (req, res) => {
+  const limit = Math.max(1, Math.min(Number(req.query.limit || 20), ACK_HISTORY_LIMIT));
+  res.json({ ok:true, service: SERVICE, ack_count: ackHistory.length, ack_history: ackHistory.slice(-limit) });
 });
 
 app.get('/api/state-map', requireViewTokenIfSet, (req, res) => {
@@ -343,7 +369,9 @@ app.get('/health', (req, res) => {
     ui_state_map: 'v1',
     pending_commands: commandQueue.length,
     ack_count: ackHistory.length,
-    command_seq: commandSeq
+    command_seq: commandSeq,
+    device_pull_ack_sim: 'v1',
+    ack_can_update_latest: true
   });
 });
 

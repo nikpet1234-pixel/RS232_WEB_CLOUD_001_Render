@@ -1,30 +1,17 @@
-RS232_WEB_CLOUD_007_CommandQueue_ARMED
-=====================================
+RS232_WEB_CLOUD_008_DevicePullAck_SIM
 
-Based on accepted RS232_WEB_CLOUD_006_CommandQueue_DISABLED.
-
-Changes:
-- Command queue can now be armed by Render environment variables, but remains OFF by default.
-- Commands are active only when ALL are true:
-  ALLOW_REMOTE_COMMANDS=1
-  COMMAND_QUEUE_ENABLED=1
-  COMMAND_TOKEN is configured
-- POST /api/request-command requires COMMAND_TOKEN when commands are active.
-- GET /api/pull and POST /api/ack require DEVICE_TOKEN.
-- Added in-RAM pending command queue and ACK history.
-- Added command IDs like cmd-000001.
-- Added allowed first-stage commands:
-  set_next_no
-  set_article
-  set_trigger
-  set_cloud_note
-- Explicitly forbidden as first-stage remote commands:
-  loop_start / loop_stop / hold_toggle / SD tools / settings / print / file access / firmware update.
-- UI now shows CMD QUEUE: ARMED only when the server reports commands_active=1.
-- UI can prompt for COMMAND_TOKEN only when the queue is armed.
-- Firmware RS232_WEB_108 remains untouched.
-
-Safety:
-- With default Render settings, command queue remains inactive.
-- Public viewer page does not contain COMMAND_TOKEN.
-- Command queue is RAM-only in this stage; Render restart clears it.
+- Built on accepted RS232_WEB_CLOUD_007_CommandQueue_ARMED.
+- Cloud-only; RS232_WEB_108 firmware remains untouched.
+- Service name changed to RS232_WEB_CLOUD_008_DevicePullAck_SIM.
+- Added Device Pull/Ack simulation support documentation and samples.
+- POST /api/ack now accepts an optional `state` object.
+- If ACK includes `state`, the server normalizes it and updates latest/history.
+- Added GET /api/ack-history.
+- Added sample_device_ack_set_next_no_ok.json.
+- Added sample_device_ack_set_trigger_ok.json.
+- Added sample_command_request_set_next_no_008.json.
+- Added test_008_powershell_commands.txt for end-to-end simulation:
+  request-command -> pull -> ack -> latest -> queue/ack history.
+- Command queue remains guarded by ALLOW_REMOTE_COMMANDS=1 + COMMAND_QUEUE_ENABLED=1 + COMMAND_TOKEN.
+- Device pull/ack remains guarded by DEVICE_TOKEN.
+- Dangerous commands remain forbidden in this stage.

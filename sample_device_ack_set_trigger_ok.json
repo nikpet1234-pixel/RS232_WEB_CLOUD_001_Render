@@ -1,0 +1,23 @@
+{
+  "id": "cmd-000001",
+  "ok": true,
+  "message": "set_trigger accepted in device simulator",
+  "device_time": "2026-06-27 16:06:00",
+  "state": {
+    "schema": "rs232_web_cloud_state_v1",
+    "device": "RS232_WEB",
+    "version": "108",
+    "time": "2026-06-27 16:06:00",
+    "status": "TRIGGER SETTINGS UPDATED",
+    "trigger_enabled": 1,
+    "trigger_parameter": "P",
+    "trigger_by": "CALC",
+    "trigger_threshold": "400.0",
+    "trigger_tolerance_pct": "0.5",
+    "trigger_value": "314.6",
+    "trigger_state": "ARMED",
+    "trigger_hit": 0,
+    "hold": 0,
+    "loop_running": 0
+  }
+}

@@ -1,7 +1,7 @@
 {
-  "name": "rs232-web-cloud-007-command-queue-armed",
+  "name": "rs232-web-cloud-008-device-pull-ack-sim",
   "version": "1.0.0",
-  "description": "RS232_WEB Cloud Relay 007 - command queue armed by Render environment variables, safe by default",
+  "description": "RS232_WEB Cloud Relay 008 - device pull/ack simulation with ACK state update, safe by default",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
