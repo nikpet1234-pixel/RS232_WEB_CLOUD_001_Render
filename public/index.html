@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RS232_WEB CLOUD Main UI</title>
+<title>RS232_WEB CLOUD Main UI StateMap</title>
 <style>
 
 
@@ -300,7 +300,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 
 
 
-/* CLOUD_ONLY_003 additions */
+/* CLOUD_ONLY additions */
 body.cloud { background:#f7f8fb; }
 .cloudBadge { display:inline-block; padding:5px 9px; border-radius:999px; background:#e8f4ff; border:1px solid #9bc8f0; font-weight:800; }
 .apiBadge { display:inline-block; padding:5px 8px; border-radius:999px; border:1px solid var(--border); background:#fff; margin:2px; }
@@ -317,6 +317,17 @@ body.cloud { background:#f7f8fb; }
 .toast { position:fixed; right:16px; bottom:16px; padding:10px 14px; border-radius:10px; background:#0b1020; color:#fff; font-weight:650; box-shadow:0 6px 24px rgba(0,0,0,.18); opacity:0; transform:translateY(8px); transition:.2s; z-index:9999; max-width:420px; }
 .toast.show { opacity:1; transform:translateY(0); }
 button:disabled { opacity:.45; cursor:not-allowed; }
+.stateMapPanel { border:1px solid #d7e7ff; background:#f4f9ff; border-radius:10px; padding:8px 10px; margin:8px 0; font-size:13px; }
+.stateMapPanel b { font-weight:900; }
+.cloudControls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+#btnCloudAuto.cloud-auto-off { background:#fff; border-color:#bbb; font-weight:800; }
+#btnCloudAuto.cloud-auto-on { background:#eaffea; border-color:#69b569; font-weight:800; }
+#btnLoop.device-loop-unknown { background:#fff7db; border-color:#d2a100; font-weight:800; }
+#btnLoop.device-loop-off { background:#eaf3ff; border-color:#6aa0d6; font-weight:800; }
+#btnLoop.device-loop-on { background:#ffecec; border-color:#d66; font-weight:800; }
+#btnHold.device-hold-unknown { background:#fff7db; border-color:#d2a100; font-weight:800; }
+.verify-ok { background:#eaffea; border-color:#69b569; }
+.verify-bad { background:#ffecec; border-color:#d66; }
 @media print { .tabs,.cloudNotice,.tblTools,.apiStatusLine button { display:none !important; } body { margin:0; } .card { break-inside: avoid; } }
 
 </style>
@@ -325,7 +336,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   <div class="deviceHeader">
     <div>
       <h2 id="deviceName">RS232_WEB CLOUD MONITOR</h2>
-      <div class="mono muted" style="margin-top:4px;">Device: <span id="deviceId">waiting for cloud data</span> <span class="cloudBadge">CLOUD READ-ONLY</span> <span class="cloudBadge">STATE MODEL 004</span></div>
+      <div class="mono muted" style="margin-top:4px;">Device: <span id="deviceId">waiting for cloud data</span> <span class="cloudBadge">CLOUD READ-ONLY</span> <span class="cloudBadge">STATE MAP 005</span></div>
     </div>
     <div class="apiStatusLine topStatus">
       <span class="apiBadge mono">WiFi: <b id="wifiInfo">CLOUD</b></span>
@@ -338,7 +349,17 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   </div>
 
   <div class="cloudNotice mono">
-    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_004 StateModel: показва само стойности, изпратени от уреда; не прави рискови локални калкулации; дистанционните команди са изключени.
+    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_005 UI_StateMap: JSON параметрите управляват съответните бутони/индикации. HOLD/LOOP/TRIG са състояние от уреда; Cloud Auto Refresh е отделна локална функция.
+    <div class="cloudControls">
+      <button id="btnCloudAuto" class="smallBtn cloud-auto-off" title="Локално обновяване на страницата, не команда към уреда">Cloud Auto Refresh: OFF</button>
+      <span class="apiBadge mono">Remote commands: <b id="cmdModeInfo">OFF</b></span>
+      <span class="apiBadge mono">UI map: <b>JSON → button/state</b></span>
+      <span class="apiBadge mono" id="verifyInfo">VERIFY: ---</span>
+    </div>
+  </div>
+
+  <div class="stateMapPanel mono">
+    Карта на състоянията: <b>hold</b> → HOLD бутон, <b>loop_running</b> → LOOP бутон, <b>trigger_state/trigger_hit</b> → TRIG статус, <b>verified</b> → VERIFY индикация, <b>no/next_no/article/target/tol</b> → съответните полета. При натискане на бутоните не се изпраща команда към уреда, защото allow_remote_commands=0.
   </div>
 
   <div class="tabs">
@@ -547,8 +568,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     latestSeq:0,
     logRows:[],
     serverHistory:[],
-    loop:false,       // local cloud auto-refresh only
-    hold:false,       // local pause only, unless device sends hold state
+    cloudAuto:false,  // local cloud auto-refresh only; not device LOOP
+    cloudPause:false, // local pause only; not device HOLD
     articles:new Set(),
     timer:null,
     pollMs:2500,
@@ -564,7 +585,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     el._t=setTimeout(()=>el.classList.remove('show'), 2800);
   }
 
-  function localOnly(msg){ toast(msg || 'CLOUD_004: дистанционните команди са изключени. Промяната е само визуална/локална.'); }
+  function localOnly(msg){ toast(msg || 'CLOUD_005: дистанционните команди са изключени. Промяната е само визуална/локална.'); }
 
   function pick(d, ...ks){
     for(const k of ks){ if(d && d[k]!==undefined && d[k]!==null && d[k] !== '') return d[k]; }
@@ -579,6 +600,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     const s=String(v ?? '').toLowerCase().trim();
     return s==='1' || s==='true' || s==='yes' || s==='on' || s==='run' || s==='running';
   }
+  function boolKnown(v){ return !(v===undefined || v===null || v===''); }
   function normalize(raw){
     raw = raw || {};
     const d = raw.latest || raw.measurement || raw.data || raw;
@@ -599,7 +621,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       h1: phase(d,'l1','h','h1','H1','l1_l','L1_L') || phase(d,'l1','l'),
       h2: phase(d,'l2','h','h2','H2','l2_l','L2_L') || phase(d,'l2','l'),
       h3: phase(d,'l3','h','h3','H3','l3_l','L3_L') || phase(d,'l3','l'),
-      // CLOUD_004: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
+      // CLOUD_005: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
       uavg: pick(d,'uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'),
       iavg: pick(d,'iavr','iavg','i_avg','i_average','i','I','current'),
       psum: pick(d,'psum','p_sum','ptotal','p_total','p','P','power'),
@@ -644,6 +666,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       cs.className='apiBadge mono ' + (c ? 'okBg' : 'warnBg');
     }
     setTxt('historyInfo', String(state.serverHistory.length || state.logRows.length || 0));
+    setTxt('cmdModeInfo', state.allowRemoteCommands ? 'ON' : 'OFF');
   }
 
   function setMeasurement(m){
@@ -700,15 +723,40 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     setTxt('trigStatus', st);
     const ts=$('trigStatus'); if(ts){ ts.className = 'v mono ' + (String(st).toUpperCase().includes('OK') || String(st).toUpperCase().includes('ARMED') ? 'ok' : (String(st).toUpperCase().includes('OUT') || String(st).toUpperCase().includes('HIT') ? 'bad' : '')); }
 
-    const deviceLoopKnown = m.loop_running !== '' && m.loop_running !== undefined;
-    const shownLoop = deviceLoopKnown ? boolLike(m.loop_running) : state.loop;
-    setTxt('loopStatus', shownLoop ? 'ON' : 'OFF');
-    const ls=$('loopStatus'); if(ls){ ls.className = shownLoop ? 'ok' : 'bad'; }
-    const lb=$('btnLoop'); if(lb){ lb.textContent= state.loop ? 'Stop Loop' : 'Start Loop'; lb.className = state.loop ? 'primary loop-on' : 'primary loop-off'; }
+    const deviceLoopKnown = boolKnown(m.loop_running);
+    const shownLoop = deviceLoopKnown ? boolLike(m.loop_running) : false;
+    setTxt('loopStatus', deviceLoopKnown ? (shownLoop ? 'ON' : 'OFF') : '---');
+    const ls=$('loopStatus'); if(ls){ ls.className = deviceLoopKnown ? (shownLoop ? 'ok' : 'bad') : 'muted'; }
+    const lb=$('btnLoop');
+    if(lb){
+      lb.textContent = deviceLoopKnown ? (shownLoop ? 'Stop Loop' : 'Start Loop') : 'Loop ?';
+      lb.className = 'primary ' + (deviceLoopKnown ? (shownLoop ? 'device-loop-on' : 'device-loop-off') : 'device-loop-unknown');
+      lb.title = 'DEVICE LOOP state follows JSON loop_running. Click is disabled while allow_remote_commands=0.';
+    }
 
-    const deviceHoldKnown = m.hold !== '' && m.hold !== undefined;
-    const shownHold = deviceHoldKnown ? boolLike(m.hold) : state.hold;
-    const hb=$('btnHold'); if(hb){ hb.textContent= shownHold ? 'HOLD RUN' : 'HOLD STOP'; hb.classList.remove('hold-run','hold-hold'); hb.classList.add(shownHold ? 'hold-hold' : 'hold-run'); }
+    const deviceHoldKnown = boolKnown(m.hold);
+    const shownHold = deviceHoldKnown ? boolLike(m.hold) : false;
+    const hb=$('btnHold');
+    if(hb){
+      hb.textContent = deviceHoldKnown ? (shownHold ? 'HOLD RUN' : 'HOLD STOP') : 'HOLD ?';
+      hb.classList.remove('hold-run','hold-hold','device-hold-unknown');
+      hb.classList.add(deviceHoldKnown ? (shownHold ? 'hold-hold' : 'hold-run') : 'device-hold-unknown');
+      hb.title = 'DEVICE HOLD state follows JSON hold. Click is disabled while allow_remote_commands=0.';
+    }
+
+    const vi=$('verifyInfo');
+    const verKnown = boolKnown(m.verified);
+    if(vi){
+      const ver = verKnown ? boolLike(m.verified) : false;
+      vi.textContent = 'VERIFY: ' + (verKnown ? (ver ? 'OK' : 'NO') : '---');
+      vi.className = 'apiBadge mono ' + (verKnown ? (ver ? 'verify-ok' : 'verify-bad') : '');
+    }
+
+    const ca=$('btnCloudAuto');
+    if(ca){
+      ca.textContent = state.cloudAuto ? 'Cloud Auto Refresh: ON' : 'Cloud Auto Refresh: OFF';
+      ca.className = 'smallBtn ' + (state.cloudAuto ? 'cloud-auto-on' : 'cloud-auto-off');
+    }
   }
 
   async function readLatest(silent){
@@ -806,14 +854,14 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     a.click(); URL.revokeObjectURL(a.href);
   }
 
-  function toggleLoop(){
-    state.loop=!state.loop;
+  function toggleCloudAutoRefresh(){
+    state.cloudAuto=!state.cloudAuto;
     updatePills();
-    toast(state.loop ? 'Cloud auto-refresh включен. Това не е команда към уреда.' : 'Cloud auto-refresh спрян. Уредът не е променен.');
-    if(state.loop) readLatest(true);
+    toast(state.cloudAuto ? 'Cloud auto-refresh включен. Това не е команда към уреда.' : 'Cloud auto-refresh спрян. Уредът не е променен.');
+    if(state.cloudAuto) readLatest(true);
   }
   async function requestCommandDisabled(cmd){
-    localOnly('CLOUD_004: командите са изключени (allow_remote_commands=0). '+cmd+' няма да се изпрати към уреда.');
+    localOnly('CLOUD_005: командите са изключени (allow_remote_commands=0). '+cmd+' няма да се изпрати към уреда.');
   }
 
   function bind(){
@@ -821,8 +869,9 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     $('btnReadAdd')?.addEventListener('click',async()=>{ const m=await readLatest(false); if(m) addCurrentRow(); });
     $('btnAddLog')?.addEventListener('click',addCurrentRow);
     $('btnPrintCurrent')?.addEventListener('click',()=>window.print());
-    $('btnHold')?.addEventListener('click',()=>{ state.hold=!state.hold; updatePills(); requestCommandDisabled('HOLD'); });
-    $('btnLoop')?.addEventListener('click',toggleLoop);
+    $('btnHold')?.addEventListener('click',()=>{ requestCommandDisabled('device HOLD'); });
+    $('btnLoop')?.addEventListener('click',()=>requestCommandDisabled('device LOOP'));
+    $('btnCloudAuto')?.addEventListener('click',toggleCloudAutoRefresh);
     $('btnExport')?.addEventListener('click',exportCsv);
     $('btnClearLog')?.addEventListener('click',()=>{ state.logRows=[]; renderLogRows(); toast('Изчистена е само локалната cloud таблица.'); });
     $('btnArticleAdd')?.addEventListener('click',()=>{ const v=$('article')?.value.trim(); if(v){ state.articles.add(v); renderArticleList(); requestCommandDisabled('set_article'); } });
@@ -839,7 +888,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     document.addEventListener('keydown',ev=>{
       if(ev.key==='F2'){ ev.preventDefault(); readLatest(false); }
       if(ev.key==='F3'){ ev.preventDefault(); addCurrentRow(); }
-      if(ev.key==='F5'){ ev.preventDefault(); toggleLoop(); }
+      if(ev.key==='F5'){ ev.preventDefault(); $('btnLoop')?.click(); }
+      if(ev.ctrlKey && ev.shiftKey && ev.key.toLowerCase()==='r'){ ev.preventDefault(); toggleCloudAutoRefresh(); }
       if(ev.ctrlKey && ev.shiftKey && ev.key.toLowerCase()==='x'){ ev.preventDefault(); $('btnReadAdd')?.click(); }
     });
   }
@@ -847,7 +897,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   window.addEventListener('load',()=>{
     bind(); updateHeader('START / CMD OFF'); updatePills(); renderLogRows();
     readLatest(true).then(()=>readHistory());
-    state.timer=setInterval(()=>{ if(state.loop && !state.hold) readLatest(true); }, state.pollMs);
+    state.timer=setInterval(()=>{ if(state.cloudAuto && !state.cloudPause) readLatest(true); }, state.pollMs);
   });
 })();
 

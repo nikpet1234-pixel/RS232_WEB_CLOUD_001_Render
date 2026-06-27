@@ -10,12 +10,32 @@ const PORT = process.env.PORT || 10000;
 const DEVICE_TOKEN = process.env.DEVICE_TOKEN || '';
 const VIEW_TOKEN = process.env.VIEW_TOKEN || '';
 const HISTORY_LIMIT = Math.max(1, Math.min(Number(process.env.HISTORY_LIMIT || 100), 1000));
-const ALLOW_REMOTE_COMMANDS = false; // CLOUD_004 remains read-only by design.
+const ALLOW_REMOTE_COMMANDS = false; // CLOUD_005 remains read-only by design; UI state mapping only.
 
 let latest = null;
 let history = [];
 let pushCount = 0;
 let bootTime = new Date().toISOString();
+
+const UI_STATE_MAP = {
+  service: 'RS232_WEB_CLOUD_005_UI_StateMap',
+  mode: 'read-only; remote commands disabled',
+  mapping: [
+    { json: 'hold', ui: 'HOLD button color/text', values: '0=normal/STOP, 1=red/HOLD RUN', action: 'read-only indication' },
+    { json: 'loop_running', ui: 'Start/Stop Loop button color/text + Loop status', values: '0=Start Loop/OFF, 1=Stop Loop/ON', action: 'read-only indication' },
+    { json: 'trigger_state', ui: 'Trigger status pill', values: 'OK/ARMED=green, HIT/OUT=red, empty=---', action: 'read-only indication' },
+    { json: 'trigger_hit', ui: 'Trigger status severity helper', values: '0=no hit, 1=hit', action: 'read-only indication' },
+    { json: 'verified', ui: 'VERIFY indication', values: '0/1', action: 'read-only indication' },
+    { json: 'trigger_parameter', ui: 'Selection field', values: 'U/I/P', action: 'local display follows device state' },
+    { json: 'trigger_by', ui: 'Trigger by field', values: 'CALC/L1/L2/L3', action: 'local display follows device state' },
+    { json: 'trigger_threshold', ui: 'Target field', values: 'numeric text', action: 'local display follows device state' },
+    { json: 'trigger_tolerance_pct', ui: 'Tol (%) field', values: 'numeric text', action: 'local display follows device state' },
+    { json: 'no / next_no', ui: 'No / Next № fields', values: 'text/number', action: 'local display follows device state' },
+    { json: 'article', ui: 'Article input', values: 'text', action: 'local display follows device state' },
+    { json: 'uavr/iavr/psum', ui: 'calculated aggregate boxes', values: 'device-sent values or ---', action: 'no cloud recalculation when missing' }
+  ]
+};
+
 
 function nowIso() { return new Date().toISOString(); }
 function clientIp(req) { return (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim(); }
@@ -148,16 +168,21 @@ app.post('/api/request-command', requireViewTokenIfSet, (req, res) => {
   res.status(403).json({ ok:false, error:'remote_commands_disabled', allow_remote_commands: 0 });
 });
 app.get('/api/pull', requireDeviceToken, (req, res) => {
-  res.json({ ok:true, has_command:false, command:null, allow_remote_commands: 0, note:'command queue disabled in CLOUD_004' });
+  res.json({ ok:true, has_command:false, command:null, allow_remote_commands: 0, note:'command queue disabled in CLOUD_005' });
 });
 app.post('/api/ack', requireDeviceToken, (req, res) => {
   res.status(403).json({ ok:false, error:'remote_commands_disabled', allow_remote_commands: 0 });
 });
 
+
+app.get('/api/state-map', requireViewTokenIfSet, (req, res) => {
+  res.json({ ok:true, allow_remote_commands: 0, state_model: 'rs232_web_cloud_state_v1', ui_state_map: UI_STATE_MAP });
+});
+
 app.get('/health', (req, res) => {
   res.json({
     ok:true,
-    service:'RS232_WEB_CLOUD_004_StateModel',
+    service:'RS232_WEB_CLOUD_005_UI_StateMap',
     boot_time: bootTime,
     now: nowIso(),
     has_latest: !!latest,
@@ -167,7 +192,8 @@ app.get('/health', (req, res) => {
     post_protected: !!DEVICE_TOKEN,
     view_protected: !!VIEW_TOKEN,
     allow_remote_commands: 0,
-    state_model: 'rs232_web_cloud_state_v1'
+    state_model: 'rs232_web_cloud_state_v1',
+    ui_state_map: 'v1'
   });
 });
 
@@ -181,5 +207,5 @@ function forbidden(req, res) {
 app.use((req, res) => res.status(404).json({ ok:false, error:'Not found' }));
 
 app.listen(PORT, () => {
-  console.log(`RS232_WEB_CLOUD_004_StateModel listening on ${PORT}`);
+  console.log(`RS232_WEB_CLOUD_005_UI_StateMap listening on ${PORT}`);
 });

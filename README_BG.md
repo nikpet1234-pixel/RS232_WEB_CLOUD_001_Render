@@ -1,36 +1,90 @@
-# RS232_WEB_CLOUD_004_StateModel
+# RS232_WEB_CLOUD_005_UI_StateMap
 
-Това е **cloud-only** версия на RS232_WEB_CLOUD. Тя не променя firmware-а на RS232_WEB_108.
+Това е **cloud-only** версия. Firmware-ът на **RS232_WEB_108 не е променян**.
 
-Текущата цел е cloud страницата да бъде подготвена за бъдеща синхронизация с уреда, но все още без дистанционно управление.
+## Основна цел
 
-## Основна идея
+CLOUD_005 фиксира връзката между JSON параметрите и визуалните бутони/индикации в cloud страницата.
 
-В предишната версия страницата приличаше визуално на Main страницата от уреда. В тази версия фокусът е логиката:
+Вече идеята е ясна:
 
-- cloud-ът приема по-пълен state JSON;
-- cloud страницата показва стойности, които са изпратени от уреда;
-- ако дадена стойност липсва, се показва `---`;
-- cloud страницата не се опитва да измисля Uavr/Iavr/Psum/L;
-- trigger/hold/loop се показват като състояние, когато бъдат изпратени от уреда;
-- дистанционните команди остават изключени.
+```text
+JSON state от уреда → съответен бутон/поле в cloud страницата
+```
+
+Пример:
+
+```text
+hold=1             → HOLD бутонът става червен
+hold=0             → HOLD бутонът се връща нормален
+loop_running=1     → LOOP бутонът показва активен цикъл
+loop_running=0     → LOOP бутонът показва спрян цикъл
+trigger_state=HIT  → Trigger status става HIT/червен
+trigger_state=OK   → Trigger status става OK/зелен
+verified=1         → VERIFY: OK
+```
+
+## Важна промяна спрямо CLOUD_004
+
+В CLOUD_004 бутонът **Start/Stop Loop** управляваше локалното auto-refresh обновяване на страницата. Това подвеждаше, защото изглеждаше като реален LOOP на уреда.
+
+В CLOUD_005 са разделени:
+
+```text
+Start/Stop Loop       → показва DEVICE loop_running от JSON
+Cloud Auto Refresh    → локално обновяване на страницата
+HOLD                  → показва DEVICE hold от JSON
+```
+
+Тоест:
+
+```text
+Start/Stop Loop и HOLD вече не сменят сами цвета си при натискане.
+Те сменят състоянието си само когато бъде получен нов JSON state.
+```
+
+При натискане на тези бутони се показва, че командите са изключени:
+
+```text
+allow_remote_commands=0
+```
+
+## UI State Map
+
+| JSON поле | Управлява в страницата |
+|---|---|
+| `hold` | HOLD бутон: нормален/червен |
+| `loop_running` | Start/Stop Loop бутон и Loop статус |
+| `trigger_enabled` | trigger логика/индикация |
+| `trigger_parameter` | Selection поле: U/I/P |
+| `trigger_by` | Trigger by поле: CALC/L1/L2/L3 |
+| `trigger_threshold` | Target поле |
+| `trigger_tolerance_pct` | Tol (%) поле |
+| `trigger_value` | Trigger value |
+| `trigger_state` | Trigger status: OK/ARMED/HIT/OUT |
+| `trigger_hit` | trigger hit индикация |
+| `verified` | VERIFY badge |
+| `no` / `next_no` | No / Next № |
+| `article` | Article поле |
+| `uavr` / `iavr` / `psum` | агрегатни стойности |
 
 ## Адреси
 
 ```text
 GET  /              Главна read-only страница
-POST /api/push      Приемане на измерване/state от уред или тестов компютър
+POST /api/push      Приемане на измерване/state, защитено с DEVICE_TOKEN
 GET  /api/latest    Последно получено състояние
 GET  /api/history   История в RAM
-GET  /health        Диагностика на cloud услугата
+GET  /api/state-map Карта JSON поле → UI елемент
+GET  /health        Диагностика
 ```
 
-Подготвени, но заключени за бъдеще:
+Подготвени, но заключени:
 
 ```text
-POST /api/request-command   връща remote_commands_disabled
-GET  /api/pull              връща has_command:false
-POST /api/ack               връща remote_commands_disabled
+POST /api/request-command   remote_commands_disabled
+GET  /api/pull              has_command:false
+POST /api/ack               remote_commands_disabled
 ```
 
 ## Защитата
@@ -41,9 +95,7 @@ POST /api/ack               връща remote_commands_disabled
 DEVICE_TOKEN
 ```
 
-Той трябва да остане в Render → Environment.
-
-`VIEW_TOKEN` е опционален. Ако го няма, страницата се отваря свободно за гледане.
+`VIEW_TOKEN` е опционален. Ако е премахнат от Render Environment, страницата се гледа без token.
 
 ## Качване в Render
 
@@ -62,7 +114,7 @@ CHANGES.txt
 .gitignore
 ```
 
-След това:
+После:
 
 ```text
 Render Dashboard
@@ -71,35 +123,43 @@ Render Dashboard
 → Deploy latest commit
 ```
 
-Ако виждаш старата страница:
+Ако виждаш стара версия:
 
 ```text
 Manual Deploy
 → Clear build cache & deploy
 ```
 
-## Тест от PowerShell
+## Проверка
 
-Задай токена и URL:
+След deploy отвори:
+
+```text
+https://rs232-web-cloud-001-render.onrender.com/health
+```
+
+Очаквано:
+
+```json
+"service": "RS232_WEB_CLOUD_005_UI_StateMap",
+"allow_remote_commands": 0,
+"ui_state_map": "v1"
+```
+
+Можеш да видиш и картата:
+
+```text
+https://rs232-web-cloud-001-render.onrender.com/api/state-map
+```
+
+## PowerShell тест
 
 ```powershell
 $token = "ТВОЯ_DEVICE_TOKEN"
 $url = "https://rs232-web-cloud-001-render.onrender.com/api/push"
 ```
 
-### Basic payload
-
-```powershell
-$body = Get-Content .\sample_payload_basic.json -Raw
-Invoke-RestMethod `
-  -Method Post `
-  -Uri $url `
-  -Headers @{ Authorization = "Bearer $token" } `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-### Full state payload
+Full state:
 
 ```powershell
 $body = Get-Content .\sample_payload_full_state.json -Raw
@@ -111,7 +171,7 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-### Trigger hit payload
+Trigger hit:
 
 ```powershell
 $body = Get-Content .\sample_payload_trigger_hit.json -Raw
@@ -123,7 +183,7 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-### Loop running payload
+Loop running:
 
 ```powershell
 $body = Get-Content .\sample_payload_loop_running.json -Raw
@@ -135,47 +195,11 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-След всеки тест отвори:
+## Очаквано поведение
 
-```text
-https://rs232-web-cloud-001-render.onrender.com/
-```
+- При `sample_payload_full_state.json`: HOLD нормален, LOOP OFF, TRIG OK.
+- При `sample_payload_trigger_hit.json`: HOLD червен, TRIG HIT, LOOP OFF.
+- При `sample_payload_loop_running.json`: LOOP активен, HOLD нормален, TRIG ARMED.
+- Бутонът **Cloud Auto Refresh** управлява само браузъра и няма общо с уреда.
+- Бутоните **HOLD** и **Start/Stop Loop** са read-only индикации, докато командите са изключени.
 
-или провери JSON:
-
-```powershell
-Invoke-RestMethod -Uri "https://rs232-web-cloud-001-render.onrender.com/api/latest"
-```
-
-## Какво е важно
-
-В тази версия бутоните могат да променят видими полета на страницата, но **не изпращат команда към уреда**.
-
-Пример:
-
-- промяна на Next No е само визуална;
-- промяна на Target/Tol/Trigger by е само визуална;
-- HOLD е само локална визуална индикация;
-- Start Loop е само cloud auto-refresh.
-
-Реална двупосочна синхронизация ще стане по-късно чрез command queue, но чак когато изрично бъде разрешено:
-
-```ini
-allow_remote_commands=1
-```
-
-Засега остава:
-
-```ini
-allow_remote_commands=0
-```
-
-## Следваща възможна стъпка
-
-След като CLOUD_004 се тества добре, следваща cloud-only версия може да бъде:
-
-```text
-RS232_WEB_CLOUD_005_CommandQueue_DISABLED
-```
-
-Там ще подготвим командната опашка по-сериозно, но все още заключена.

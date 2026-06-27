@@ -1,54 +1,42 @@
-RS232_WEB_CLOUD_004_StateModel
+RS232_WEB_CLOUD_005_UI_StateMap
 ================================
 
 Дата: 2026-06-27
 Тип: cloud-only версия. RS232_WEB_108 firmware не е променян.
 
 Основна цел:
-- Запазва визуалната база от RS232_WEB_CLOUD_003_Render_RS232_UI.
-- Добавя по-правилен модел на състоянието за бъдеща синхронизация с уреда.
-- Не прави опасни локални калкулации за Uavr/Iavr/Psum/L, ако те не са изпратени от уреда.
-- Показва '---' за липсващи стойности.
-- Подготвя полета за trigger/hold/loop/verified/next_no, но без активиране на дистанционни команди.
+- Фиксира връзката JSON поле → UI бутон/индикация.
+- Разделя реалното DEVICE състояние от локалните функции на cloud страницата.
+- Премахва подвеждащото поведение, при което Start/Stop Loop сменяше цвета си като локален auto-refresh.
+
+Ново в UI:
+- Добавен е отделен бутон: Cloud Auto Refresh.
+- Start/Stop Loop вече следва само JSON полето loop_running.
+- HOLD вече следва само JSON полето hold.
+- Trigger status следва trigger_state / trigger_hit / trigger_value.
+- VERIFY badge следва verified.
+- Добавен е видим UI State Map панел.
+- При натискане на DEVICE бутони се показва allow_remote_commands=0, без да се сменя състоянието им локално.
 
 Ново в server.js:
-- service name: RS232_WEB_CLOUD_004_StateModel
-- state_model: rs232_web_cloud_state_v1
-- POST /api/push приема basic JSON и бъдещ full state JSON.
-- Поддържа nested фази:
-  l1.u, l1.i, l1.p, l1.h
-  l2.u, l2.i, l2.p, l2.h
-  l3.u, l3.i, l3.p, l3.h
-- Поддържа агрегати, изпратени от уреда:
-  uavr/uavg/u, iavr/iavg/i, psum/p
-- Поддържа trigger state:
-  trigger_enabled, trigger_parameter, trigger_by, trigger_threshold,
-  trigger_tolerance_pct, trigger_value, trigger_state, trigger_hit, autostop
-- Поддържа:
-  no, next_no, article, hold, loop_running, verified, active_phases, u_mode
-- /api/request-command, /api/pull, /api/ack са добавени като бъдеща структура,
-  но командите са изключени.
-- /api/request-command и /api/ack връщат remote_commands_disabled.
-- /api/pull връща has_command:false.
+- service name: RS232_WEB_CLOUD_005_UI_StateMap
+- Добавен е GET /api/state-map.
+- /health връща ui_state_map: v1.
+- Command endpoints остават заключени.
 
-Ново в public/index.html:
-- CLOUD_004 StateModel badge.
-- Показва агрегатите само ако са подадени от cloud state.
-- Ако липсват Uavr/Iavr/Psum/L стойности, показва '---'.
-- Trigger UI използва trigger_state/trigger_value от уреда, ако са налични.
-- Промени по No, Article, Target, Tol, Trigger by, HOLD са само локални/визуални.
-- При опит за промяна се показва, че allow_remote_commands=0.
+Запазено:
+- POST /api/push остава защитен с DEVICE_TOKEN.
+- VIEW_TOKEN остава опционален за гледане.
+- Няма tunnel към ESP32.
+- Няма SD Tools, Settings, Diagnostics, FFT, директни команди към уреда.
 
-Примерни payload файлове:
+Тестови payload файлове:
 - sample_payload_basic.json
 - sample_payload_full_state.json
 - sample_payload_trigger_hit.json
 - sample_payload_loop_running.json
 
-Безопасност:
-- Няма tunnel към ESP32.
-- Няма достъп до SD Tools.
-- Няма Settings/Diagnostics/FFT.
-- Няма дистанционно управление.
-- POST /api/push остава защитен с DEVICE_TOKEN.
-- VIEW_TOKEN остава опционален само за гледане.
+Очаквани тестове:
+- full_state: HOLD нормален, LOOP OFF, TRIG OK.
+- trigger_hit: HOLD червен, TRIG HIT, LOOP OFF.
+- loop_running: LOOP активен, HOLD нормален, TRIG ARMED.
