@@ -1,43 +1,11 @@
-# RS232_WEB_CLOUD_009_ButtonCommandMap
+# RS232_WEB_CLOUD_010_FastCommandUI
 
-Cloud service/UI пакет за RS232_WEB, базиран на CLOUD_008.
+Малка cloud-side оптимизация след 009.
 
-Тази версия поправя връзката между бутоните на cloud страницата и command queue командите.
+Промени:
+- UI auto-refresh интервалът е намален от 2500 ms на 1000 ms.
+- След записване на команда страницата временно следи `/api/latest` и `/api/command-queue` по-бързо, докато се появи ACK от уреда.
+- Няма нови команди.
+- Няма промяна в token логиката.
 
-## Основни поправки
-
-- Print бутонът е премахнат от cloud страницата.
-- HOLD изпраща `hold_start` / `hold_stop`.
-- LOOP изпраща `loop_start` / `loop_stop`.
-- Target / Tol / Selection / Trigger by / AutoStop изпращат `set_trigger`.
-- I factor / 3-phase voltage / L1 / L2 / L3 / Inductance изпращат `set_measurement_options`.
-- Article изпраща `set_article`.
-- Next No / NO+ / NO- изпращат `set_next_no`.
-
-## За да се приемат командите
-
-В Render Environment трябва да има:
-
-```ini
-ALLOW_REMOTE_COMMANDS=1
-COMMAND_QUEUE_ENABLED=1
-COMMAND_TOKEN=твоя-команден-токен
-DEVICE_TOKEN=твоя-device-token
-```
-
-След промяна на Environment Variables направи:
-
-```text
-Manual Deploy -> Deploy latest commit
-```
-
-## Важно
-
-Cloud страницата само записва чакаща команда. Уредът реално я изпълнява чак когато firmware-ът направи:
-
-```text
-GET /api/pull
-POST /api/ack
-```
-
-Съвместим firmware: RS232_WEB_114 или по-нов.
+Тази cloud версия е препоръчителна заедно с firmware RS232_WEB_115.

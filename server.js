@@ -6,7 +6,7 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
-const SERVICE = 'RS232_WEB_CLOUD_009_ButtonCommandMap';
+const SERVICE = 'RS232_WEB_CLOUD_010_FastCommandUI';
 const STATE_MODEL = 'rs232_web_cloud_state_v1';
 const PORT = process.env.PORT || 10000;
 const DEVICE_TOKEN = process.env.DEVICE_TOKEN || '';
@@ -318,7 +318,7 @@ app.post('/api/ack', requireDeviceToken, (req, res) => {
     latest_updated_from_ack: false
   };
 
-  // CLOUD_009 addition: for simulation, ACK may carry a partial/full device state.
+  // CLOUD_010 addition: for simulation, ACK may carry a partial/full device state.
   // This lets us test the full loop without ESP32 firmware yet:
   // request-command -> device pull -> device ack with state -> cloud UI updates.
   if (Object.keys(resultState).length) {
