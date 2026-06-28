@@ -1,7 +1,7 @@
-<!doctype html>
-<html lang="bg">
-<head>
-<meta charset="utf-8">
+<!DOCTYPE html>
+<!-- saved from url=(0073)file:///D:/ARDUINO/RS232_WEB_CLOUD_012_UVoltageLabelFix/public/index.html -->
+<html lang="bg"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RS232_WEB CLOUD Device Pull/Ack SIM</title>
 <style>
@@ -354,19 +354,17 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       <span class="apiBadge mono">RS232: <b id="rsInfo">READ-ONLY</b></span>
       <span class="apiBadge mono">SD: <b id="sdInfo">NO SD ACCESS</b></span>
       <span class="apiBadge mono">RTC/Time: <b id="rtcInfo">-</b></span>
-      <span class="apiBadge mono" id="cloudState">START</span>
+      <span class="apiBadge mono warnBg" id="cloudState">OFFLINE</span>
       <span class="apiBadge mono">History: <b id="historyInfo">0</b></span>
     </div>
   </div>
 
-  <div class="cloudNotice mono">
-    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_010 DevicePullAck_SIM: JSON параметрите управляват UI състоянията. Добавена е симулация на ESP32 pull/ack: request-command → /api/pull → /api/ack. ACK със state може да обнови последното cloud състояние.
-    <div class="cloudControls">
+  <div class="cloudNotice mono"><div class="cloudControls">
       <button id="btnCloudAuto" class="smallBtn cloud-auto-off" title="Локално обновяване на страницата, не команда към уреда">Cloud Auto Refresh: OFF</button>
       <span class="apiBadge mono warnBg" id="cmdQueueInfo" title="Future command queue status">CMD QUEUE: DISABLED</span>
       <span class="apiBadge mono">Remote commands: <b id="cmdModeInfo">OFF</b></span>
       <span class="apiBadge mono">UI map: <b>JSON → button/state</b></span>
-      <span class="apiBadge mono" id="verifyInfo">VERIFY: ---</span>
+      <span class="apiBadge mono " id="verifyInfo">VERIFY: -</span>
     </div>
   </div>
 
@@ -384,8 +382,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <button id="btnRead" class="primary" title="Key: F2">Read full (U/I/P)</button>
         <button id="btnReadAdd" class="primary" title="Key: Ctrl+Shift+X">Read + Add</button>
         <button id="btnAddLog" class="primary" title="Key: F3">Add to Log</button>
-        <button id="btnHold" class="hold-run">HOLD STOP</button>
-        <button id="btnLoop" class="primary loop-off" title="Key: F5">Start Loop</button>
+        <button id="btnHold" class="device-hold-unknown" title="DEVICE HOLD state follows JSON hold. Click queues future command only when commands_active=1 and COMMAND_TOKEN is supplied.">HOLD ?</button>
+        <button id="btnLoop" class="primary device-loop-unknown" title="DEVICE LOOP state follows JSON loop_running. Click queues future command only when commands_active=1 and COMMAND_TOKEN is supplied.">Loop ?</button>
 
         <div class="compact inside-label">
           <label>Target</label>
@@ -395,7 +393,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <div class="compact inside-label hamegHideSetting" title="In line-voltage mode U is recalculated as ULL ≈ Uph·√3.">
           <label>3-phase voltage</label>
           <select id="uDisplayMode" style="font-size:18px;">
-            <option value="phase" selected>Phase Uph</option>
+            <option value="phase" selected="">Phase Uph</option>
             <option value="line">Line ULL</option>
           </select>
         </div>
@@ -413,7 +411,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <div class="compact inside-label">
           <label>AutoStop</label>
           <select id="autoStop" style="font-size:18px;">
-            <option value="true" selected>true</option>
+            <option value="true" selected="">true</option>
             <option value="false">false</option>
           </select>
         </div>
@@ -421,7 +419,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <div class="compact inside-label">
           <label>Selection</label>
           <select id="izbor" style="font-size:18px;">
-            <option value="U" selected>U</option>
+            <option value="U" selected="">U</option>
             <option value="I">I</option>
             <option value="P">P</option>
           </select>
@@ -430,7 +428,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <div class="compact inside-label" title="Which value to compare against Target±Tol">
           <label>Trigger by</label>
           <select id="trigBy" style="font-size:18px;">
-            <option value="CALC" selected>Calculated</option>
+            <option value="CALC" selected="">Calculated</option>
             <option value="L1">L1</option>
             <option value="L2">L2</option>
             <option value="L3">L3</option>
@@ -438,20 +436,20 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         </div>
 
         <div class="phases" title="Which phases participate in reading/trigger">
-          <label><input type="checkbox" id="phL1" checked> L1</label>
-          <label><input type="checkbox" id="phL2" checked> L2</label>
-          <label><input type="checkbox" id="phL3" checked> L3</label>
+          <label><input type="checkbox" id="phL1" checked=""> L1</label>
+          <label><input type="checkbox" id="phL2" checked=""> L2</label>
+          <label><input type="checkbox" id="phL3" checked=""> L3</label>
           <label title="Calculates H(i)=U(i)/(2·π·F·I(i))"><input type="checkbox" id="calcInd"> Inductance</label>
         </div>
 
         <div style="flex:1"></div>
-        <span class="mono muted">Loop: <span id="loopStatus" class="bad">OFF</span></span>
+        <span class="mono muted">Loop: <span id="loopStatus" class="muted">-</span></span>
       </div>
 
       <div class="ctrlBar">
-        <div class="pill"><span class="muted">Target range:</span> <b id="pillRange">-</b></div>
-        <div class="pill"><span class="muted">Trigger value:</span> <b class="mono" id="trigVal">-</b></div>
-        <div class="pill"><span class="muted">Trigger status:</span> <b class="v mono" id="trigStatus">-</b></div>
+        <div class="pill"><span class="muted">Target range:</span> <b id="pillRange">229.770 ... 230.230</b></div>
+        <div class="pill"><span class="muted">Trigger value:</span> <b class="mono" id="trigVal">0.0000</b></div>
+        <div class="pill"><span class="muted">Trigger status:</span> <b class="v mono bad" id="trigStatus">OUT</b></div>
         <div class="pill"><span class="muted">AutoStop:</span> <b class="mono" id="trigAuto">true</b></div>
         <div class="pill"><span class="muted">Last read:</span> <b id="lastRead">-</b></div>
       </div>
@@ -460,7 +458,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
           <div class="label">Article / Артикул</div>
           <div class="articleLine">
             <input id="article" list="articleList" type="text" maxlength="40" placeholder="Избор / нов артикул" title="Type to filter/sort existing articles. If no exact match exists, Add becomes active.">
-            <button id="btnArticleAdd" class="smallBtn" title="Add article only to this browser list" disabled>Add</button>
+            <button id="btnArticleAdd" class="smallBtn" title="Add article only to this browser list" disabled="">Add</button>
           </div>
           <datalist id="articleList"></datalist>
           <div class="nextNoLine">
@@ -471,15 +469,15 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <div class="block">
           <div class="blockHdr">
             <div class="title">U</div>
-            <div class="hint" id="uModeHint">RMS phase (active phases)</div>
+            <div class="hint" id="uModeHint">RMS line ULL (≈√3·Uph)</div>
           </div>
           <div class="blockGrid">
-            <div class="cell"><div class="k" id="u1Lbl">L1</div><div class="v mono big" id="u1">-</div></div>
-            <div class="cell"><div class="k" id="u2Lbl">L2</div><div class="v mono big" id="u2">-</div></div>
-            <div class="cell"><div class="k" id="u3Lbl">L3</div><div class="v mono big" id="u3">-</div></div>
+            <div class="cell hlParam"><div class="k" id="u1Lbl">L1</div><div class="v mono big" id="u1">-</div></div>
+            <div class="cell hlParam"><div class="k" id="u2Lbl">L2</div><div class="v mono big" id="u2">-</div></div>
+            <div class="cell hlParam"><div class="k" id="u3Lbl">L3</div><div class="v mono big" id="u3">-</div></div>
           </div>
           <div class="aggRow">
-            <div class="aggCell"><div class="k" id="uavgLbl">Uavg phase</div><div class="v mono big calcBig" id="uavg">-</div></div>
+            <div class="aggCell hlParam hlTrigger trigBad"><div class="k" id="uavgLbl">Uavg line</div><div class="v mono big calcBig" id="uavg">-</div></div>
           </div>
         </div>
 
@@ -538,7 +536,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <div style="flex:1"></div>
         <span class="muted">Read-only cloud view. Add/Clear/Export work only in this browser view.</span>
       </div>
-      <div class="muted" id="livePreviewNote" style="margin:6px 0 4px 0"></div>
+      <div class="muted" id="livePreviewNote" style="margin:6px 0 4px 0">Няма записи в локалната таблица.</div>
       <div id="logScroll" style="overflow:auto; max-height:420px; border:1px solid var(--border); border-radius:10px;">
         <table id="logTable">
           <thead>
@@ -553,7 +551,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
               <th id="thU1">U1</th><th id="thU2">U2</th><th id="thU3">U3</th>
               <th>I1</th><th>I2</th><th>I3</th>
               <th>P1</th><th>P2</th><th>P3</th>
-              <th id="thUavg">Uavg</th><th>Iavg</th><th>Psum</th>
+              <th id="thUavg">Uavg line</th><th>Iavg</th><th>Psum</th>
               <th>Trigger</th>
               <th>Actions</th>
             </tr>
@@ -649,7 +647,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       iavg: pick(d,'iavr','iavg','i_avg','i_average','i','I','current'),
       psum: pick(d,'psum','p_sum','ptotal','p_total','p','P','power'),
       activePhases: pick(d,'activePhases','active_phases','phases') || 'L1,L2,L3',
-      uMode: pick(d,'uMode','u_mode','uDisplayMode') || (($('uDisplayMode')?.value === 'line') ? 'line' : 'phase'),
+      uMode: normalizeUmode(pick(d,'uMode','u_mode','uDisplayMode','voltageMode','voltage_mode','u_mode_display')) || normalizeUmode($('uDisplayMode')?.value) || 'phase',
       current_factor: pick(d,'current_factor','currentFactor','ifactor','iFactor'),
       calc_inductance: pick(d,'calc_inductance','calcInductance'),
       source: pick(d,'source') || 'cloud',
@@ -677,6 +675,23 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   function setTxt(id,v){ const el=$(id); if(el) el.textContent=fmtDash(v); }
   function setVal(id,v){ const el=$(id); if(el && document.activeElement !== el && v!==undefined && v!==null && v!=='') el.value=String(v); }
   function setSelect(id,v){ const el=$(id); if(!el || document.activeElement===el || v===undefined || v===null || v==='') return; const val=String(v); if([...el.options].some(o=>o.value===val)) el.value=val; }
+
+  function normalizeUmode(v){
+    const s=String(v ?? '').trim().toLowerCase();
+    if(!s) return '';
+    if(s==='line' || s==='ull' || s==='u_ll' || s==='ll' || s.includes('line')) return 'line';
+    if(s==='phase' || s==='uph' || s==='u_ph' || s==='ph' || s.includes('phase')) return 'phase';
+    return '';
+  }
+
+  function updateVoltageLabels(){
+    const m=state.current || {};
+    const mode = normalizeUmode(m.uMode) || normalizeUmode($('uDisplayMode')?.value) || 'phase';
+    const line = mode === 'line';
+    setTxt('uModeHint', line ? 'RMS line ULL (≈√3·Uph)' : 'RMS phase Uph (active phases)');
+    setTxt('uavgLbl', line ? 'Uavg line' : 'Uavg phase');
+    setTxt('thUavg', line ? 'Uavg line' : 'Uavg phase');
+  }
 
   function updateHeader(apiStatus){
     setTxt('deviceName','RS232_WEB CLOUD MONITOR');
@@ -717,7 +732,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     setVal('target', m.trigger_threshold);
     setVal('tolPct', m.trigger_tolerance_pct);
     setSelect('autoStop', m.autostop);
-    if(m.uMode) setSelect('uDisplayMode', m.uMode);
+    if(m.uMode) setSelect('uDisplayMode', normalizeUmode(m.uMode) || m.uMode);
+    updateVoltageLabels();
     setVal('currentFactor', m.current_factor);
     const ap = String(m.activePhases || '').toUpperCase();
     if($('phL1') && ap) $('phL1').checked = ap.includes('L1') || ap.includes('1');
@@ -1053,7 +1069,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     $('btnNoPlus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||0)+1)); requestCommand('set_next_no'); });
     $('btnNoMinus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||1)-1)); requestCommand('set_next_no'); });
     ['target','tolPct','autoStop','izbor','trigBy'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); requestCommand('set_trigger'); }));
-    ['currentFactor','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); requestCommand('set_measurement_options'); }));
+    ['currentFactor','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',()=>{ updateVoltageLabels(); updatePills(); requestCommand('set_measurement_options'); }));
     document.querySelector('#logTable tbody')?.addEventListener('click',ev=>{
       const b=ev.target.closest('button[data-act="copy"]'); if(!b) return;
       const row=state.logRows[Number(b.dataset.i)];
@@ -1070,12 +1086,13 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   }
 
   window.addEventListener('load',()=>{
-    bind(); updateHeader('START / CMD CHECK'); updatePills(); renderLogRows(); refreshCommandQueueStatus();
+    bind(); updateHeader('START / CMD CHECK'); updateVoltageLabels(); updatePills(); renderLogRows(); refreshCommandQueueStatus();
     readLatest(true).then(()=>readHistory());
     state.timer=setInterval(()=>{ if(state.cloudAuto && !state.cloudPause) readLatest(true); }, state.pollMs);
   });
 })();
 
 </script>
-</body>
-</html>
+
+
+<div id="toast" class="toast">CLOUD_010: command endpoint недостъпен. set_measurement_options няма да се изпрати към уреда.</div></body></html>

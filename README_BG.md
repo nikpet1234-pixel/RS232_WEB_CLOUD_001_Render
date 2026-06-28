@@ -1,23 +1,27 @@
-# RS232_WEB_CLOUD_011_UI_Cleanup
+# RS232_WEB_CLOUD_012_UVoltageLabelFix
 
-Cloud-only поправка върху CLOUD_010.
+Cloud UI поправка за надписите на напреженията при режим **3-phase voltage**.
 
-Минимални файлове за Render:
+## Какво е поправено
 
-- server.js
-- package.json
-- public/index.html
-- README_BG.md
-- CHANGES.txt
-- .gitignore
+При промяна на режима от **Phase Uph** към **Line ULL** cloud страницата вече обновява:
 
-Поправки:
+- подсказката в U блока;
+- етикета на Uavg;
+- заглавието Uavg в log таблицата;
+- select полето `3-phase voltage`, включително когато firmware/cloud state върне `LINE`, `line`, `ULL`, `PHASE`, `phase` или `Uph`.
 
-1. Празните стойности се показват като `-`, не като `---`.
-2. Лог таблицата не добавя редове без реални измерени стойности.
-3. L1/L2/L3 inductance вече не показват JSON обекти.
-4. Колоната за устройство в лога използва `device_name` / `idn` / `instrument`, ако са налични.
-5. Скрит е големият cloudNotice/state-map текст и MAIN таб бутонът.
-6. Маркирането по trigger параметър е коригирано: U/I/P групата се оцветява, а избраният CALC/L1/L2/L3 елемент се маркира отделно.
+## Качване в Render/GitHub
 
-Remote command логиката остава както в CLOUD_010.
+За deploy са нужни само:
+
+```text
+server.js
+package.json
+public/index.html
+README_BG.md
+CHANGES.txt
+.gitignore
+```
+
+Промяната е само в `public/index.html`. Firmware не се пипа.
