@@ -1,27 +1,16 @@
-# RS232_WEB_CLOUD_012_UVoltageLabelFix
+# RS232_WEB_CLOUD_013_NoPadding
 
-Cloud UI поправка за надписите на напреженията при режим **3-phase voltage**.
+Cloud UI поправка върху 012.
 
-## Какво е поправено
+## Промяна
 
-При промяна на режима от **Phase Uph** към **Line ULL** cloud страницата вече обновява:
+- Поредният номер в облачната страница вече се показва без водещи нули.
+- `000123` се показва като `123`.
+- `No+` / `No-` работят върху нормализирания номер.
+- Командата `set_next_no` към уреда се изпраща без водещи нули.
+- Log таблицата и CSV export също махат водещите нули само за `no` и `next_no`.
 
-- подсказката в U блока;
-- етикета на Uavg;
-- заглавието Uavg в log таблицата;
-- select полето `3-phase voltage`, включително когато firmware/cloud state върне `LINE`, `line`, `ULL`, `PHASE`, `phase` или `Uph`.
+## Важно
 
-## Качване в Render/GitHub
-
-За deploy са нужни само:
-
-```text
-server.js
-package.json
-public/index.html
-README_BG.md
-CHANGES.txt
-.gitignore
-```
-
-Промяната е само в `public/index.html`. Firmware не се пипа.
+Firmware не се пипа. Промяната е само в `public/index.html`.
+Ако самият уред продължи да връща номера с водещи нули, cloud страницата пак ще ги скрива визуално.

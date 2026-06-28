@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0073)file:///D:/ARDUINO/RS232_WEB_CLOUD_012_UVoltageLabelFix/public/index.html -->
+<!-- saved from url=(0066)file:///D:/ARDUINO/RS232_WEB_CLOUD_013_NoPadding/public/index.html -->
 <html lang="bg"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -455,7 +455,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       </div>
 <div class="measWrap">
         <div class="measCard articleNoCard">
-          <div class="label">Article / Артикул</div>
+          <div class="label">Article</div>
           <div class="articleLine">
             <input id="article" list="articleList" type="text" maxlength="40" placeholder="Избор / нов артикул" title="Type to filter/sort existing articles. If no exact match exists, Add becomes active.">
             <button id="btnArticleAdd" class="smallBtn" title="Add article only to this browser list" disabled="">Add</button>
@@ -463,7 +463,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
           <datalist id="articleList"></datalist>
           <div class="nextNoLine">
             <div class="label" style="margin:0">Next №</div>
-            <input id="nextNo" type="number" min="1" step="1" value="1" class="nextNoInput" size="5"><div class="noBtns"><button id="btnNoMinus" class="smallBtn" title="Local only">NO-</button><button id="btnNoPlus" class="smallBtn" title="Local only">NO+</button></div>
+            <input id="nextNo" type="number" min="1" step="1" value="1" class="nextNoInput" size="5"><div class="noBtns"><button id="btnNoMinus" class="smallBtn" title="Local only">-</button><button id="btnNoPlus" class="smallBtn" title="Local only">+</button></div>
           </div>
         </div>
         <div class="block">
@@ -529,7 +529,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     </div>
 
     <div class="card">
-      <h3 style="margin-top:0">Cloud log table / Последни cloud измервания</h3>
+      <h3 style="margin-top:0">Cloud log table</h3>
       <div class="tblTools">
         <button id="btnExport" class="primary">Export results</button>
         <button id="btnClearLog" class="danger">Clear table</button>
@@ -610,6 +610,14 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   function pick(d, ...ks){
     for(const k of ks){ if(d && d[k]!==undefined && d[k]!==null && d[k] !== '') return d[k]; }
     return '';
+  }
+  // CLOUD_013: показва поредния номер без водещи нули само в cloud UI.
+  // Пример: 000123 -> 123, 000000 -> 0. Ако номерът съдържа букви, не го променя.
+  function stripNoZeros(v){
+    const s=String(v ?? '').trim();
+    if(!s) return '';
+    if(/^\d+$/.test(s)) return s.replace(/^0+(?=\d)/,'');
+    return s;
   }
   function phase(d, ph, field, ...flatAliases){
     const obj = d?.[ph] || d?.[ph.toUpperCase()] || {};
@@ -726,7 +734,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     setTxt('h1', m.h1); setTxt('h2', m.h2); setTxt('h3', m.h3); setTxt('freqHz', m.freq);
     setTxt('lastRead', m.time || new Date().toLocaleString());
     setVal('article', m.article);
-    setVal('nextNo', m.next_no || m.no);
+    setVal('nextNo', stripNoZeros(m.next_no || m.no));
     setSelect('izbor', m.trigger_parameter);
     setSelect('trigBy', m.trigger_by);
     setVal('target', m.trigger_threshold);
@@ -886,7 +894,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     if(!state.current) return null;
     const m={...state.current};
     if(!hasMeasurementValues(m)) return null;
-    const no=$('nextNo')?.value;
+    const no=stripNoZeros($('nextNo')?.value);
     const art=$('article')?.value;
     if(no) m.no=no;
     if(art) m.article=art;
@@ -908,7 +916,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     tbody.innerHTML='';
     state.logRows.forEach((m,idx)=>{
       const tr=document.createElement('tr');
-      const noArt = `<div class="noArticleCell"><div class="rowNo">${esc(m.no || (idx+1))}</div><div class="rowArticle">${esc(m.article || '')}</div></div>`;
+      const noArt = `<div class="noArticleCell"><div class="rowNo">${esc(stripNoZeros(m.no) || (idx+1))}</div><div class="rowArticle">${esc(m.article || '')}</div></div>`;
       const trigText = m.trigger_state || m.status || EMPTY;
       const cells=[
         noArt, esc(m.time), esc(m.meter || m.idn || ''), esc(m.freq), esc(m.h1), esc(m.h2), esc(m.h3),
@@ -941,7 +949,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     const rows=state.logRows.length?state.logRows:(hasMeasurementValues(state.current)?[state.current]:[]);
     if(!rows.length){ toast('Няма данни за export.'); return; }
     const cols=['no','next_no','article','time','meter','device','version','freq','h1','h2','h3','activePhases','uMode','u1','u2','u3','i1','i2','i3','p1','p2','p3','uavg','iavg','psum','trigger_enabled','trigger_parameter','trigger_by','trigger_threshold','trigger_tolerance_pct','trigger_value','trigger_state','hold','loop_running','verified','status'];
-    const csv=['sep=,', cols.join(',')].concat(rows.map(r=>cols.map(c=>'"'+String(r[c]??'').replace(/"/g,'""')+'"').join(','))).join('\r\n');
+    const csv=['sep=,', cols.join(',')].concat(rows.map(r=>cols.map(c=>{ const val=(c==='no'||c==='next_no') ? stripNoZeros(r[c]) : (r[c]??''); return '"'+String(val).replace(/"/g,'""')+'"'; }).join(','))).join('\r\n');
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
@@ -977,7 +985,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   }
 
   function commandPayload(cmd){
-    if(cmd==='set_next_no') return { value: $('nextNo')?.value || '' };
+    if(cmd==='set_next_no') return { value: stripNoZeros($('nextNo')?.value || '') };
     if(cmd==='set_article') return { value: $('article')?.value || '' };
     if(cmd==='set_trigger') return {
       parameter: $('izbor')?.value || '',
@@ -1066,8 +1074,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     $('article')?.addEventListener('input', updateArticleAddButton);
     $('article')?.addEventListener('change',()=>requestCommand('set_article'));
     $('nextNo')?.addEventListener('change',()=>requestCommand('set_next_no'));
-    $('btnNoPlus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||0)+1)); requestCommand('set_next_no'); });
-    $('btnNoMinus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||1)-1)); requestCommand('set_next_no'); });
+    $('btnNoPlus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(stripNoZeros(el.value)||0)+1)); requestCommand('set_next_no'); });
+    $('btnNoMinus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(stripNoZeros(el.value)||1)-1)); requestCommand('set_next_no'); });
     ['target','tolPct','autoStop','izbor','trigBy'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); requestCommand('set_trigger'); }));
     ['currentFactor','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',()=>{ updateVoltageLabels(); updatePills(); requestCommand('set_measurement_options'); }));
     document.querySelector('#logTable tbody')?.addEventListener('click',ev=>{

@@ -1,8 +1,8 @@
-RS232_WEB_CLOUD_012_UVoltageLabelFix
+RS232_WEB_CLOUD_013_NoPadding
 
-Поправки спрямо RS232_WEB_CLOUD_011_UI_Cleanup:
-- Поправено е обновяването на надписите в блока U при промяна на "3-phase voltage".
-- Cloud страницата вече сменя uModeHint, Uavg label и header-а в log таблицата според phase/line режим.
-- Добавена е нормализация на uMode стойности: phase/PHASE/Uph и line/LINE/ULL.
-- Промяната е само в cloud UI: public/index.html.
-- Няма промяна в server.js, API, command queue или firmware.
+- Removed leading zero display for No / Next No in the cloud UI.
+- Added stripNoZeros() helper in public/index.html.
+- No+ / No- now operate on unpadded values.
+- set_next_no command payload is sent without leading zero padding.
+- Log table and CSV export display/export no and next_no without leading zeros.
+- No firmware changes required.
