@@ -1,8 +1,0 @@
-{
-  "cmd": "set_next_no",
-  "payload": {
-    "value": "000130"
-  },
-  "source": "cloud_ui_test",
-  "note": "Accepted only when CLOUD_007 commands_active=1 and COMMAND_TOKEN is supplied."
-}
