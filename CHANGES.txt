@@ -1,17 +1,28 @@
-RS232_WEB_CLOUD_008_DevicePullAck_SIM
+RS232_WEB_CLOUD_009_ButtonCommandMap
+====================================
 
-- Built on accepted RS232_WEB_CLOUD_007_CommandQueue_ARMED.
-- Cloud-only; RS232_WEB_108 firmware remains untouched.
-- Service name changed to RS232_WEB_CLOUD_008_DevicePullAck_SIM.
-- Added Device Pull/Ack simulation support documentation and samples.
-- POST /api/ack now accepts an optional `state` object.
-- If ACK includes `state`, the server normalizes it and updates latest/history.
-- Added GET /api/ack-history.
-- Added sample_device_ack_set_next_no_ok.json.
-- Added sample_device_ack_set_trigger_ok.json.
-- Added sample_command_request_set_next_no_008.json.
-- Added test_008_powershell_commands.txt for end-to-end simulation:
-  request-command -> pull -> ack -> latest -> queue/ack history.
-- Command queue remains guarded by ALLOW_REMOTE_COMMANDS=1 + COMMAND_QUEUE_ENABLED=1 + COMMAND_TOKEN.
-- Device pull/ack remains guarded by DEVICE_TOKEN.
-- Dangerous commands remain forbidden in this stage.
+Цел: поправка на реалното поведение на бутоните/полета в cloud страницата.
+
+Промени спрямо CLOUD_008:
+- Премахнат е бутонът Print от cloud Main UI.
+- Разрешени са допълнителни command queue команди:
+  hold_start, hold_stop, hold_toggle,
+  loop_start, loop_stop, loop_toggle,
+  set_current_factor,
+  set_measurement_options,
+  set_phase_options.
+- HOLD бутонът вече изпраща hold_start или hold_stop според текущия JSON state.
+- LOOP бутонът вече изпраща loop_start или loop_stop според текущия JSON state.
+- Target / Tol / Selection / Trigger by / AutoStop изпращат set_trigger.
+- I factor / 3-phase voltage / L1 / L2 / L3 / Inductance изпращат set_measurement_options.
+- Article промяна и Article Add изпращат set_article.
+- Next No промяна, NO+ и NO- изпращат set_next_no.
+- Export result и Clear table остават локални функции на browser таблицата.
+
+Важно:
+- Командите се записват само ако Render има:
+  ALLOW_REMOTE_COMMANDS=1
+  COMMAND_QUEUE_ENABLED=1
+  COMMAND_TOKEN=...
+- POST /api/request-command изисква COMMAND_TOKEN.
+- ESP32 pull/ack изисква DEVICE_TOKEN.

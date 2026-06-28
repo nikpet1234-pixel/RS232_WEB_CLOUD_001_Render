@@ -349,7 +349,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   </div>
 
   <div class="cloudNotice mono">
-    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_008 DevicePullAck_SIM: JSON параметрите управляват UI състоянията. Добавена е симулация на ESP32 pull/ack: request-command → /api/pull → /api/ack. ACK със state може да обнови последното cloud състояние.
+    Cloud-only UI по визуална база от RS232_WEB_108. CLOUD_009 DevicePullAck_SIM: JSON параметрите управляват UI състоянията. Добавена е симулация на ESP32 pull/ack: request-command → /api/pull → /api/ack. ACK със state може да обнови последното cloud състояние.
     <div class="cloudControls">
       <button id="btnCloudAuto" class="smallBtn cloud-auto-off" title="Локално обновяване на страницата, не команда към уреда">Cloud Auto Refresh: OFF</button>
       <span class="apiBadge mono warnBg" id="cmdQueueInfo" title="Future command queue status">CMD QUEUE: DISABLED</span>
@@ -360,7 +360,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   </div>
 
   <div class="stateMapPanel mono">
-    Карта на състоянията / командите: <b>hold</b> → HOLD бутон, <b>loop_running</b> → LOOP бутон, <b>trigger_state/trigger_hit</b> → TRIG статус, <b>verified</b> → VERIFY индикация, <b>no/next_no/article/target/tol</b> → съответните полета. При активирана queue и въведен COMMAND_TOKEN меките настройки могат да се запишат като чакащи команди; реалното изпълнение става само когато уредът по-късно ги изтегли с /api/pull.
+    Карта на състоянията / командите: <b>hold</b> → HOLD бутон, <b>loop_running</b> → LOOP бутон, <b>trigger_state/trigger_hit</b> → TRIG статус, <b>verified</b> → VERIFY индикация, <b>no/next_no/article/target/tol</b> → съответните полета. При активирана queue и въведен COMMAND_TOKEN настройките/бутоните се записват като чакащи команди. Реалното изпълнение става, когато уредът ги изтегли с /api/pull и върне /api/ack.
   </div>
 
   <div class="tabs">
@@ -373,7 +373,6 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <button id="btnRead" class="primary" title="Key: F2">Read full (U/I/P)</button>
         <button id="btnReadAdd" class="primary" title="Key: Ctrl+Shift+X">Read + Add</button>
         <button id="btnAddLog" class="primary" title="Key: F3">Add to Log</button>
-        <button id="btnPrintCurrent" class="primary" title="Print current result after confirmation">Print</button>
         <button id="btnHold" class="hold-run">HOLD STOP</button>
         <button id="btnLoop" class="primary loop-off" title="Key: F5">Start Loop</button>
 
@@ -590,7 +589,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     el._t=setTimeout(()=>el.classList.remove('show'), 2800);
   }
 
-  function localOnly(msg){ toast(msg || 'CLOUD_008: командата не е записана; queue не е активна или няма COMMAND_TOKEN.'); }
+  function localOnly(msg){ toast(msg || 'CLOUD_009: командата не е записана; queue не е активна или няма COMMAND_TOKEN.'); }
 
   function pick(d, ...ks){
     for(const k of ks){ if(d && d[k]!==undefined && d[k]!==null && d[k] !== '') return d[k]; }
@@ -626,12 +625,14 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       h1: phase(d,'l1','h','h1','H1','l1_l','L1_L') || phase(d,'l1','l'),
       h2: phase(d,'l2','h','h2','H2','l2_l','L2_L') || phase(d,'l2','l'),
       h3: phase(d,'l3','h','h3','H3','l3_l','L3_L') || phase(d,'l3','l'),
-      // CLOUD_008: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
+      // CLOUD_009: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
       uavg: pick(d,'uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'),
       iavg: pick(d,'iavr','iavg','i_avg','i_average','i','I','current'),
       psum: pick(d,'psum','p_sum','ptotal','p_total','p','P','power'),
       activePhases: pick(d,'activePhases','active_phases','phases') || 'L1,L2,L3',
       uMode: pick(d,'uMode','u_mode','uDisplayMode') || (($('uDisplayMode')?.value === 'line') ? 'line' : 'phase'),
+      current_factor: pick(d,'current_factor','currentFactor','ifactor','iFactor'),
+      calc_inductance: pick(d,'calc_inductance','calcInductance'),
       source: pick(d,'source') || 'cloud',
       trigger_enabled: pick(d,'trigger_enabled','triggerEnabled','trig_enabled','trigEnabled'),
       trigger_parameter: pick(d,'trigger_parameter','triggerParameter','trig_param','trigParam','selection','izbor'),
@@ -698,6 +699,12 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     setVal('tolPct', m.trigger_tolerance_pct);
     setSelect('autoStop', m.autostop);
     if(m.uMode) setSelect('uDisplayMode', m.uMode);
+    setVal('currentFactor', m.current_factor);
+    const ap = String(m.activePhases || '').toUpperCase();
+    if($('phL1') && ap) $('phL1').checked = ap.includes('L1') || ap.includes('1');
+    if($('phL2') && ap) $('phL2').checked = ap.includes('L2') || ap.includes('2');
+    if($('phL3') && ap) $('phL3').checked = ap.includes('L3') || ap.includes('3');
+    if($('calcInd') && m.calc_inductance !== undefined && m.calc_inductance !== null && m.calc_inductance !== '') $('calcInd').checked = boolLike(m.calc_inductance);
     updatePills();
     updateHeader();
   }
@@ -883,6 +890,14 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     }catch(e){}
   }
 
+  function activePhaseText(){
+    const a=[];
+    if($('phL1')?.checked) a.push('L1');
+    if($('phL2')?.checked) a.push('L2');
+    if($('phL3')?.checked) a.push('L3');
+    return a.length ? a.join(',') : 'L1';
+  }
+
   function commandPayload(cmd){
     if(cmd==='set_next_no') return { value: $('nextNo')?.value || '' };
     if(cmd==='set_article') return { value: $('article')?.value || '' };
@@ -893,6 +908,16 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       tolerance_pct: $('tolPct')?.value || '',
       autostop: $('autoStop')?.value || '',
       enabled: 1
+    };
+    if(cmd==='set_current_factor') return { value: $('currentFactor')?.value || '', current_factor: $('currentFactor')?.value || '' };
+    if(cmd==='set_measurement_options') return {
+      u_mode: $('uDisplayMode')?.value || 'phase',
+      active_phases: activePhaseText(),
+      l1: $('phL1')?.checked ? 1 : 0,
+      l2: $('phL2')?.checked ? 1 : 0,
+      l3: $('phL3')?.checked ? 1 : 0,
+      calc_inductance: $('calcInd')?.checked ? 1 : 0,
+      current_factor: $('currentFactor')?.value || '1'
     };
     return {};
   }
@@ -916,7 +941,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       const r=await fetch('/api/request-command', { method:'POST', headers, body:JSON.stringify(body) });
       const j=await r.json().catch(()=>({}));
       if(r.status===403 && j.error==='remote_commands_disabled'){
-        toast('CLOUD_008: командата '+cmd+' НЕ е записана. Queue не е активна.');
+        toast('CLOUD_009: командата '+cmd+' НЕ е записана. Queue не е активна.');
       } else if(r.status===401){
         localStorage.removeItem('rs232_web_command_token'); state.commandToken='';
         toast('Грешен или липсващ COMMAND_TOKEN.');
@@ -927,7 +952,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       }
       refreshCommandQueueStatus();
     }catch(e){
-      localOnly('CLOUD_008: command endpoint недостъпен. '+cmd+' няма да се изпрати към уреда.');
+      localOnly('CLOUD_009: command endpoint недостъпен. '+cmd+' няма да се изпрати към уреда.');
     }
   }
 
@@ -935,17 +960,19 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     $('btnRead')?.addEventListener('click',()=>readLatest(false));
     $('btnReadAdd')?.addEventListener('click',async()=>{ const m=await readLatest(false); if(m) addCurrentRow(); });
     $('btnAddLog')?.addEventListener('click',addCurrentRow);
-    $('btnPrintCurrent')?.addEventListener('click',()=>window.print());
-    $('btnHold')?.addEventListener('click',()=>{ requestCommand('hold_toggle'); });
-    $('btnLoop')?.addEventListener('click',()=>requestCommand('loop_start'));
+    $('btnHold')?.addEventListener('click',()=>{ requestCommand(boolLike(state.current?.hold) ? 'hold_stop' : 'hold_start'); });
+    $('btnLoop')?.addEventListener('click',()=>requestCommand(boolLike(state.current?.loop_running) ? 'loop_stop' : 'loop_start'));
     $('btnCloudAuto')?.addEventListener('click',toggleCloudAutoRefresh);
     $('btnExport')?.addEventListener('click',exportCsv);
     $('btnClearLog')?.addEventListener('click',()=>{ state.logRows=[]; renderLogRows(); toast('Изчистена е само локалната cloud таблица.'); });
     $('btnArticleAdd')?.addEventListener('click',()=>{ const v=$('article')?.value.trim(); if(v){ state.articles.add(v); renderArticleList(); requestCommand('set_article'); } });
     $('article')?.addEventListener('input', updateArticleAddButton);
+    $('article')?.addEventListener('change',()=>requestCommand('set_article'));
+    $('nextNo')?.addEventListener('change',()=>requestCommand('set_next_no'));
     $('btnNoPlus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||0)+1)); requestCommand('set_next_no'); });
     $('btnNoMinus')?.addEventListener('click',()=>{ const el=$('nextNo'); if(el) el.value=String(Math.max(1,Number(el.value||1)-1)); requestCommand('set_next_no'); });
-    ['target','tolPct','currentFactor','autoStop','izbor','trigBy','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); if(['target','tolPct','autoStop','izbor','trigBy'].includes(id)) requestCommand('set_trigger'); }));
+    ['target','tolPct','autoStop','izbor','trigBy'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); requestCommand('set_trigger'); }));
+    ['currentFactor','uDisplayMode','phL1','phL2','phL3','calcInd'].forEach(id=>$(id)?.addEventListener('change',()=>{ updatePills(); requestCommand('set_measurement_options'); }));
     document.querySelector('#logTable tbody')?.addEventListener('click',ev=>{
       const b=ev.target.closest('button[data-act="copy"]'); if(!b) return;
       const row=state.logRows[Number(b.dataset.i)];

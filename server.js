@@ -6,7 +6,7 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
-const SERVICE = 'RS232_WEB_CLOUD_008_DevicePullAck_SIM';
+const SERVICE = 'RS232_WEB_CLOUD_009_ButtonCommandMap';
 const STATE_MODEL = 'rs232_web_cloud_state_v1';
 const PORT = process.env.PORT || 10000;
 const DEVICE_TOKEN = process.env.DEVICE_TOKEN || '';
@@ -38,8 +38,8 @@ const UI_STATE_MAP = {
   mode: COMMANDS_ACTIVE ? 'device pull/ack simulation armed' : 'read-only / command queue not active',
   safety: 'Command requests require COMMAND_TOKEN; device pull/ack require DEVICE_TOKEN.',
   mapping: [
-    { json: 'hold', ui: 'HOLD button color/text', values: '0=normal/STOP, 1=red/HOLD RUN', action: 'device state indication; command disabled unless queue is active and token is supplied' },
-    { json: 'loop_running', ui: 'Start/Stop Loop button color/text + Loop status', values: '0=Start Loop/OFF, 1=Stop Loop/ON', action: 'device state indication; LOOP control still forbidden in first command stage' },
+    { json: 'hold', ui: 'HOLD button color/text', values: '0=normal/STOP, 1=red/HOLD RUN', action: 'device state indication; cloud UI can queue hold_start/hold_stop when commands_active=1' },
+    { json: 'loop_running', ui: 'Start/Stop Loop button color/text + Loop status', values: '0=Start Loop/OFF, 1=Stop Loop/ON', action: 'device state indication; cloud UI can queue loop_start/loop_stop when commands_active=1' },
     { json: 'trigger_state', ui: 'Trigger status pill', values: 'OK/ARMED=green, HIT/OUT=red, empty=---', action: 'read-only indication' },
     { json: 'trigger_hit', ui: 'Trigger status severity helper', values: '0=no hit, 1=hit', action: 'read-only indication' },
     { json: 'verified', ui: 'VERIFY indication', values: '0/1', action: 'read-only indication' },
@@ -60,15 +60,24 @@ const COMMAND_MAP = {
   command_token_configured: !!COMMAND_TOKEN,
   commands_active: COMMANDS_ACTIVE ? 1 : 0,
   policy: COMMANDS_ACTIVE
-    ? 'Commands may be queued only with COMMAND_TOKEN. Device pull/ack simulation uses DEVICE_TOKEN. ACK may include a state object that updates the latest cloud state.'
+    ? 'Commands may be queued only with COMMAND_TOKEN. Device pull/ack uses DEVICE_TOKEN. ACK may include a state object that updates the latest cloud state.'
     : 'Commands are not active unless ALLOW_REMOTE_COMMANDS=1, COMMAND_QUEUE_ENABLED=1, and COMMAND_TOKEN is configured.',
   allowed_first_stage: [
-    { cmd:'set_next_no', fields:['value'], note:'Soft setting for next number.' },
-    { cmd:'set_article', fields:['value'], note:'Soft setting for article text.' },
-    { cmd:'set_trigger', fields:['parameter','by','threshold','tolerance_pct','autostop','enabled'], note:'Soft trigger configuration.' },
-    { cmd:'set_cloud_note', fields:['value'], note:'Display-only cloud note.' }
+    { cmd:'set_next_no', fields:['value'], note:'Set device next number.' },
+    { cmd:'set_article', fields:['value'], note:'Set active article.' },
+    { cmd:'set_trigger', fields:['parameter','by','threshold','tolerance_pct','autostop','enabled'], note:'Target/tolerance/selection/autostop.' },
+    { cmd:'set_current_factor', fields:['value','current_factor'], note:'Set I factor.' },
+    { cmd:'set_measurement_options', fields:['u_mode','active_phases','l1','l2','l3','calc_inductance','current_factor'], note:'Voltage mode, phase selection, inductance and I factor.' },
+    { cmd:'set_phase_options', fields:['active_phases','l1','l2','l3'], note:'Set active phases.' },
+    { cmd:'hold_toggle', fields:[], note:'Toggle device HOLD.' },
+    { cmd:'hold_start', fields:[], note:'Set HOLD on.' },
+    { cmd:'hold_stop', fields:[], note:'Set HOLD off.' },
+    { cmd:'loop_start', fields:[], note:'Start device loop.' },
+    { cmd:'loop_stop', fields:[], note:'Stop device loop.' },
+    { cmd:'loop_toggle', fields:[], note:'Toggle device loop.' },
+    { cmd:'set_cloud_note', fields:['value','note','message'], note:'Diagnostic note.' }
   ],
-  forbidden_in_cloud_first_stage: ['sdtools','settings','firmware_update','file_read','file_write','api_read','loop_start','loop_stop','hold_toggle','print','delete_log']
+  still_forbidden: ['sdtools','settings','firmware_update','file_read','file_write','api_read','print','delete_log']
 };
 
 function nowIso() { return new Date().toISOString(); }
@@ -201,7 +210,7 @@ function normalizePayload(body, req) {
 }
 
 function allowedCommand(cmd) {
-  return ['set_next_no','set_article','set_trigger','set_cloud_note'].includes(String(cmd || '').trim());
+  return COMMAND_MAP.allowed_first_stage.some(c => c.cmd === String(cmd || '').trim());
 }
 function normalizeCommand(body, req) {
   const b = body || {};
@@ -309,7 +318,7 @@ app.post('/api/ack', requireDeviceToken, (req, res) => {
     latest_updated_from_ack: false
   };
 
-  // CLOUD_008 addition: for simulation, ACK may carry a partial/full device state.
+  // CLOUD_009 addition: for simulation, ACK may carry a partial/full device state.
   // This lets us test the full loop without ESP32 firmware yet:
   // request-command -> device pull -> device ack with state -> cloud UI updates.
   if (Object.keys(resultState).length) {

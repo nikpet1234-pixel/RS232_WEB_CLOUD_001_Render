@@ -1,4 +1,4 @@
-# RS232_WEB_CLOUD_008_DevicePullAck_SIM - PowerShell test sequence
+# RS232_WEB_CLOUD_009_ButtonCommandMap - PowerShell test sequence
 # 1) In Render Environment set:
 #    ALLOW_REMOTE_COMMANDS=1
 #    COMMAND_QUEUE_ENABLED=1
