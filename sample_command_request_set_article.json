@@ -1,7 +1,0 @@
-{
-  "cmd": "set_article",
-  "payload": {
-    "value": "TR-250VA"
-  },
-  "source": "cloud_ui_test"
-}
