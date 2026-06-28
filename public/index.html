@@ -215,6 +215,16 @@ td.selCell { background: #d9ecff; outline: 2px solid #2a7; outline-offset: -2px;
   border-color: #2a7;
   box-shadow: 0 0 0 2px rgba(42,119,0,.12);
 }
+.cell.hlTrigger.trigBad, .aggCell.hlTrigger.trigBad{
+  background:#ffecec;
+  border-color:#d66;
+  box-shadow:0 0 0 2px rgba(200,0,0,.12);
+}
+.cell.hlTrigger.trigWarn, .aggCell.hlTrigger.trigWarn{
+  background:#fff3cd;
+  border-color:#d9a500;
+}
+
   
     /* FFT table */
     #fftTable td, #fftTable th {
@@ -317,7 +327,7 @@ body.cloud { background:#f7f8fb; }
 .toast { position:fixed; right:16px; bottom:16px; padding:10px 14px; border-radius:10px; background:#0b1020; color:#fff; font-weight:650; box-shadow:0 6px 24px rgba(0,0,0,.18); opacity:0; transform:translateY(8px); transition:.2s; z-index:9999; max-width:420px; }
 .toast.show { opacity:1; transform:translateY(0); }
 button:disabled { opacity:.45; cursor:not-allowed; }
-.stateMapPanel { border:1px solid #d7e7ff; background:#f4f9ff; border-radius:10px; padding:8px 10px; margin:8px 0; font-size:13px; }
+.stateMapPanel { display:none !important; border:1px solid #d7e7ff; background:#f4f9ff; border-radius:10px; padding:8px 10px; margin:8px 0; font-size:13px; }
 .stateMapPanel b { font-weight:900; }
 .cloudControls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
 #btnCloudAuto.cloud-auto-off { background:#fff; border-color:#bbb; font-weight:800; }
@@ -328,6 +338,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 #btnHold.device-hold-unknown { background:#fff7db; border-color:#d2a100; font-weight:800; }
 .verify-ok { background:#eaffea; border-color:#69b569; }
 .verify-bad { background:#ffecec; border-color:#d66; }
+.tabs { display:none !important; }
 @media print { .tabs,.cloudNotice,.tblTools,.apiStatusLine button { display:none !important; } body { margin:0; } .card { break-inside: avoid; } }
 
 </style>
@@ -463,12 +474,12 @@ button:disabled { opacity:.45; cursor:not-allowed; }
             <div class="hint" id="uModeHint">RMS phase (active phases)</div>
           </div>
           <div class="blockGrid">
-            <div class="cell hlParam"><div class="k" id="u1Lbl">L1</div><div class="v mono big" id="u1">-</div></div>
-            <div class="cell hlParam"><div class="k" id="u2Lbl">L2</div><div class="v mono big" id="u2">-</div></div>
-            <div class="cell hlParam"><div class="k" id="u3Lbl">L3</div><div class="v mono big" id="u3">-</div></div>
+            <div class="cell"><div class="k" id="u1Lbl">L1</div><div class="v mono big" id="u1">-</div></div>
+            <div class="cell"><div class="k" id="u2Lbl">L2</div><div class="v mono big" id="u2">-</div></div>
+            <div class="cell"><div class="k" id="u3Lbl">L3</div><div class="v mono big" id="u3">-</div></div>
           </div>
           <div class="aggRow">
-            <div class="aggCell hlParam hlTrigger"><div class="k" id="uavgLbl">Uavg phase</div><div class="v mono big calcBig" id="uavg">-</div></div>
+            <div class="aggCell"><div class="k" id="uavgLbl">Uavg phase</div><div class="v mono big calcBig" id="uavg">-</div></div>
           </div>
         </div>
 
@@ -560,7 +571,14 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 (function(){
   'use strict';
   const $ = (id)=>document.getElementById(id);
-  const fmtDash = (v)=> (v===undefined || v===null || v==='') ? '---' : String(v);
+  const EMPTY = '-';
+  function isEmptyValue(v){
+    if(v===undefined || v===null) return true;
+    if(typeof v === 'object') return true;
+    const s=String(v).trim();
+    return !s || s===EMPTY || s==='-' || s==='null' || s==='undefined' || s.startsWith('{') || s.startsWith('[object');
+  }
+  const fmtDash = (v)=> isEmptyValue(v) ? EMPTY : String(v);
   const asNum = (v)=>{ const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : NaN; };
   const esc = (s)=>String(s ?? '').replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const state = {
@@ -611,7 +629,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     const rawState = d.raw_state || d;
     const obj={
       schema: pick(d,'schema','state_model') || 'rs232_web_cloud_state_v1',
-      device: pick(d,'device','deviceName','type') || 'RS232_WEB',
+      device: pick(d,'device','type') || 'RS232_WEB',
+      meter: pick(d,'device_name','deviceName','instrument','instrument_name','meter','idn','device_idn','device_model','source_device'),
       version: pick(d,'version','fw','firmware') || '108',
       no: pick(d,'no','serial','number'),
       next_no: pick(d,'next_no','nextNo','nextno') || pick(d,'no','serial','number'),
@@ -622,9 +641,9 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       u1: phase(d,'l1','u','u1','U1'), u2: phase(d,'l2','u','u2','U2'), u3: phase(d,'l3','u','u3','U3'),
       i1: phase(d,'l1','i','i1','I1'), i2: phase(d,'l2','i','i2','I2'), i3: phase(d,'l3','i','i3','I3'),
       p1: phase(d,'l1','p','p1','P1'), p2: phase(d,'l2','p','p2','P2'), p3: phase(d,'l3','p','p3','P3'),
-      h1: phase(d,'l1','h','h1','H1','l1_l','L1_L') || phase(d,'l1','l'),
-      h2: phase(d,'l2','h','h2','H2','l2_l','L2_L') || phase(d,'l2','l'),
-      h3: phase(d,'l3','h','h3','H3','l3_l','L3_L') || phase(d,'l3','l'),
+      h1: phase(d,'l1','h','h1','H1','l1_l','L1_L'),
+      h2: phase(d,'l2','h','h2','H2','l2_l','L2_L'),
+      h3: phase(d,'l3','h','h3','H3','l3_l','L3_L'),
       // CLOUD_010: aggregates must come from the device/state package. We do not calculate Uavr/Iavr/Psum here.
       uavg: pick(d,'uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'),
       iavg: pick(d,'iavr','iavg','i_avg','i_average','i','I','current'),
@@ -662,11 +681,11 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   function updateHeader(apiStatus){
     setTxt('deviceName','RS232_WEB CLOUD MONITOR');
     const c = state.current;
-    setTxt('deviceId', c ? `${c.device} v${c.version}` : 'waiting for cloud data');
+    setTxt('deviceId', c ? `${c.meter || c.device || '-'} / ${c.device || 'RS232_WEB'} v${c.version}` : 'waiting for cloud data');
     setTxt('wifiInfo','CLOUD');
     setTxt('rsInfo','READ-ONLY');
     setTxt('sdInfo','NO SD ACCESS');
-    setTxt('rtcInfo', c?.time || '---');
+    setTxt('rtcInfo', c?.time || EMPTY);
     const cs=$('cloudState');
     if(cs){
       const txt = apiStatus || (c ? (state.commandsActive ? 'ONLINE / CMD ARMED' : 'ONLINE / CMD OFF') : 'NO DATA');
@@ -730,19 +749,20 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     const val=asNum(deviceTrigValue || selected);
     const lo=Number.isFinite(target) && Number.isFinite(tol) ? target*(1-tol/100) : NaN;
     const hi=Number.isFinite(target) && Number.isFinite(tol) ? target*(1+tol/100) : NaN;
-    setTxt('pillRange', Number.isFinite(lo) ? `${lo.toFixed(3)} ... ${hi.toFixed(3)}` : '---');
+    setTxt('pillRange', Number.isFinite(lo) ? `${lo.toFixed(3)} ... ${hi.toFixed(3)}` : EMPTY);
     setTxt('trigVal', deviceTrigValue || (Number.isFinite(val) ? val.toFixed(4) : selected));
-    setTxt('trigAuto', $('autoStop')?.value || m.autostop || '---');
+    setTxt('trigAuto', $('autoStop')?.value || m.autostop || EMPTY);
 
-    let st = m.trigger_state || '---';
+    let st = m.trigger_state || EMPTY;
     // Only as visual fallback when the device did not send trigger_state and the local inputs are sufficient.
-    if(st==='---' && Number.isFinite(lo) && Number.isFinite(hi) && Number.isFinite(val)) st=(val>=lo && val<=hi) ? 'OK' : 'OUT';
+    if(st===EMPTY && Number.isFinite(lo) && Number.isFinite(hi) && Number.isFinite(val)) st=(val>=lo && val<=hi) ? 'OK' : 'OUT';
     setTxt('trigStatus', st);
     const ts=$('trigStatus'); if(ts){ ts.className = 'v mono ' + (String(st).toUpperCase().includes('OK') || String(st).toUpperCase().includes('ARMED') ? 'ok' : (String(st).toUpperCase().includes('OUT') || String(st).toUpperCase().includes('HIT') ? 'bad' : '')); }
+    applyTriggerHighlights(st);
 
     const deviceLoopKnown = boolKnown(m.loop_running);
     const shownLoop = deviceLoopKnown ? boolLike(m.loop_running) : false;
-    setTxt('loopStatus', deviceLoopKnown ? (shownLoop ? 'ON' : 'OFF') : '---');
+    setTxt('loopStatus', deviceLoopKnown ? (shownLoop ? 'ON' : 'OFF') : EMPTY);
     const ls=$('loopStatus'); if(ls){ ls.className = deviceLoopKnown ? (shownLoop ? 'ok' : 'bad') : 'muted'; }
     const lb=$('btnLoop');
     if(lb){
@@ -765,7 +785,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     const verKnown = boolKnown(m.verified);
     if(vi){
       const ver = verKnown ? boolLike(m.verified) : false;
-      vi.textContent = 'VERIFY: ' + (verKnown ? (ver ? 'OK' : 'NO') : '---');
+      vi.textContent = 'VERIFY: ' + (verKnown ? (ver ? 'OK' : 'NO') : EMPTY);
       vi.className = 'apiBadge mono ' + (verKnown ? (ver ? 'verify-ok' : 'verify-bad') : '');
     }
 
@@ -800,14 +820,56 @@ button:disabled { opacity:.45; cursor:not-allowed; }
       if(!r.ok) return;
       const data=await r.json();
       const arr=Array.isArray(data.history) ? data.history : [];
-      state.serverHistory = arr.map(normalize);
+      state.serverHistory = arr.map(normalize).filter(hasMeasurementValues);
       if(state.serverHistory.length){ state.logRows = state.serverHistory.slice().reverse(); renderLogRows(); updateHeader(); }
+      else { state.logRows=[]; renderLogRows(); updateHeader(); }
     }catch(e){}
+  }
+
+  function hasMeasurementValues(m){
+    if(!m) return false;
+    if(String(m.valid ?? '').toLowerCase() === 'false') return false;
+    const fields=['u1','u2','u3','i1','i2','i3','p1','p2','p3','uavg','iavg','psum','h1','h2','h3','freq'];
+    return fields.some(k=>!isEmptyValue(m[k]));
+  }
+
+  function cleanDisplayValue(v){
+    return isEmptyValue(v) ? EMPTY : String(v);
+  }
+
+  function clearTriggerHighlights(){
+    document.querySelectorAll('.cell,.aggCell').forEach(el=>{
+      el.classList.remove('hlParam','hlTrigger','trigBad','trigWarn');
+    });
+  }
+
+  function applyTriggerHighlights(statusText){
+    clearTriggerHighlights();
+    const m=state.current || {};
+    const sel=String($('izbor')?.value || m.trigger_parameter || '').toUpperCase();
+    const by=String($('trigBy')?.value || m.trigger_by || 'CALC').toUpperCase();
+    const map={
+      U:{CALC:'uavg',L1:'u1',L2:'u2',L3:'u3', all:['u1','u2','u3','uavg']},
+      I:{CALC:'iavg',L1:'i1',L2:'i2',L3:'i3', all:['i1','i2','i3','iavg']},
+      P:{CALC:'psum',L1:'p1',L2:'p2',L3:'p3', all:['p1','p2','p3','psum']}
+    };
+    const group=map[sel];
+    if(!group) return;
+    group.all.forEach(id=>$(id)?.parentElement?.classList.add('hlParam'));
+    const targetId=group[by] || group.CALC;
+    const cell=$(targetId)?.parentElement;
+    if(cell){
+      cell.classList.add('hlTrigger');
+      const st=String(statusText || '').toUpperCase();
+      if(st.includes('HIT') || st.includes('OUT') || st.includes('FAIL') || st.includes('BAD')) cell.classList.add('trigBad');
+      else if(st.includes('ARM')) cell.classList.add('trigWarn');
+    }
   }
 
   function rowFromCurrent(){
     if(!state.current) return null;
     const m={...state.current};
+    if(!hasMeasurementValues(m)) return null;
     const no=$('nextNo')?.value;
     const art=$('article')?.value;
     if(no) m.no=no;
@@ -818,7 +880,7 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 
   function addCurrentRow(){
     const m=rowFromCurrent();
-    if(!m){ toast('Няма текущо измерване. Първо READ.'); return; }
+    if(!m){ toast('Няма измерени стойности за добавяне.'); return; }
     state.logRows.unshift(m);
     if(state.logRows.length>200) state.logRows.length=200;
     renderLogRows();
@@ -831,15 +893,15 @@ button:disabled { opacity:.45; cursor:not-allowed; }
     state.logRows.forEach((m,idx)=>{
       const tr=document.createElement('tr');
       const noArt = `<div class="noArticleCell"><div class="rowNo">${esc(m.no || (idx+1))}</div><div class="rowArticle">${esc(m.article || '')}</div></div>`;
-      const trigText = m.trigger_state || m.status || '---';
+      const trigText = m.trigger_state || m.status || EMPTY;
       const cells=[
-        noArt, esc(m.time), esc(m.device), esc(m.freq), esc(m.h1), esc(m.h2), esc(m.h3),
+        noArt, esc(m.time), esc(m.meter || m.idn || ''), esc(m.freq), esc(m.h1), esc(m.h2), esc(m.h3),
         esc(m.activePhases), esc(m.uMode), esc(m.u1), esc(m.u2), esc(m.u3),
         esc(m.i1), esc(m.i2), esc(m.i3), esc(m.p1), esc(m.p2), esc(m.p3),
         esc(m.uavg), esc(m.iavg), esc(m.psum), esc(trigText),
         `<button class="smallBtn" data-act="copy" data-i="${idx}">Copy</button>`
       ];
-      tr.innerHTML=cells.map(c=>`<td>${c || '---'}</td>`).join('');
+      tr.innerHTML=cells.map(c=>`<td>${c || EMPTY}</td>`).join('');
       tbody.appendChild(tr);
     });
     setTxt('livePreviewNote', state.logRows.length ? `Показани записи: ${state.logRows.length}` : 'Няма записи в локалната таблица.');
@@ -860,9 +922,9 @@ button:disabled { opacity:.45; cursor:not-allowed; }
   }
 
   function exportCsv(){
-    const rows=state.logRows.length?state.logRows:(state.current?[state.current]:[]);
+    const rows=state.logRows.length?state.logRows:(hasMeasurementValues(state.current)?[state.current]:[]);
     if(!rows.length){ toast('Няма данни за export.'); return; }
-    const cols=['no','next_no','article','time','device','version','freq','h1','h2','h3','activePhases','uMode','u1','u2','u3','i1','i2','i3','p1','p2','p3','uavg','iavg','psum','trigger_enabled','trigger_parameter','trigger_by','trigger_threshold','trigger_tolerance_pct','trigger_value','trigger_state','hold','loop_running','verified','status'];
+    const cols=['no','next_no','article','time','meter','device','version','freq','h1','h2','h3','activePhases','uMode','u1','u2','u3','i1','i2','i3','p1','p2','p3','uavg','iavg','psum','trigger_enabled','trigger_parameter','trigger_by','trigger_threshold','trigger_tolerance_pct','trigger_value','trigger_state','hold','loop_running','verified','status'];
     const csv=['sep=,', cols.join(',')].concat(rows.map(r=>cols.map(c=>'"'+String(r[c]??'').replace(/"/g,'""')+'"').join(','))).join('\r\n');
     const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
     const a=document.createElement('a');

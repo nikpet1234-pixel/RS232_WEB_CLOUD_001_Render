@@ -6,7 +6,7 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
-const SERVICE = 'RS232_WEB_CLOUD_010_FastCommandUI';
+const SERVICE = 'RS232_WEB_CLOUD_011_UI_Cleanup';
 const STATE_MODEL = 'rs232_web_cloud_state_v1';
 const PORT = process.env.PORT || 10000;
 const DEVICE_TOKEN = process.env.DEVICE_TOKEN || '';
@@ -124,7 +124,13 @@ function cleanValue(v, maxLen=120) {
   if (v === undefined || v === null) return '';
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
   if (typeof v === 'string') return v.slice(0, maxLen);
-  return JSON.stringify(v).slice(0, maxLen);
+  return ''; // Never expose nested objects as cell values.
+}
+function hasMeasurementValues(item) {
+  if (!item) return false;
+  if (String(item.valid || '').toLowerCase() === 'false') return false;
+  const fields = ['u1','u2','u3','i1','i2','i3','p1','p2','p3','uavg','iavg','psum','h1','h2','h3','freq'];
+  return fields.some(k => item[k] !== undefined && item[k] !== null && String(item[k]).trim() !== '');
 }
 function cleanObj(obj) {
   if (!obj || typeof obj !== 'object') return {};
@@ -152,7 +158,8 @@ function normalizePayload(body, req) {
   const b = body || {};
   const out = {
     schema: cleanValue(b.schema || b.state_schema || STATE_MODEL),
-    device: cleanValue(firstDefined(b, ['device','deviceName','type']) || 'RS232_WEB'),
+    device: cleanValue(firstDefined(b, ['device','type']) || 'RS232_WEB'),
+    meter: cleanValue(firstDefined(b, ['device_name','deviceName','instrument','instrument_name','meter','idn','device_idn','device_model','source_device'])),
     version: cleanValue(firstDefined(b, ['version','fw','firmware']) || '108'),
     no: cleanValue(firstDefined(b, ['no','serial','number'])),
     next_no: cleanValue(firstDefined(b, ['next_no','nextNo','nextno'])),
@@ -170,9 +177,9 @@ function normalizePayload(body, req) {
     p1: cleanValue(nestedPhase(b, 'l1', 'p', ['p1','P1'])),
     p2: cleanValue(nestedPhase(b, 'l2', 'p', ['p2','P2'])),
     p3: cleanValue(nestedPhase(b, 'l3', 'p', ['p3','P3'])),
-    h1: cleanValue(nestedPhase(b, 'l1', 'h', ['h1','H1','l1_l','L1_L']) || nestedPhase(b, 'l1', 'l', ['l1','L1'])),
-    h2: cleanValue(nestedPhase(b, 'l2', 'h', ['h2','H2','l2_l','L2_L']) || nestedPhase(b, 'l2', 'l', ['l2','L2'])),
-    h3: cleanValue(nestedPhase(b, 'l3', 'h', ['h3','H3','l3_l','L3_L']) || nestedPhase(b, 'l3', 'l', ['l3','L3'])),
+    h1: cleanValue(nestedPhase(b, 'l1', 'h', ['h1','H1','l1_l','L1_L'])),
+    h2: cleanValue(nestedPhase(b, 'l2', 'h', ['h2','H2','l2_l','L2_L'])),
+    h3: cleanValue(nestedPhase(b, 'l3', 'h', ['h3','H3','l3_l','L3_L'])),
 
     // Aggregates are accepted from the device. CLOUD_007 does not calculate them when missing.
     uavg: cleanValue(firstDefined(b, ['uavr','uavr_phase','uavg','u_avg','u_average','u','U','voltage'])),
@@ -182,6 +189,7 @@ function normalizePayload(body, req) {
     activePhases: cleanValue(firstDefined(b, ['activePhases','active_phases','phases']) || 'L1,L2,L3'),
     uMode: cleanValue(firstDefined(b, ['uMode','u_mode','uDisplayMode']) || 'phase'),
     source: cleanValue(firstDefined(b, ['source']) || 'cloud'),
+    valid: cleanValue(firstDefined(b, ['valid','measurement_valid','meas_valid'])),
 
     trigger_enabled: cleanValue(firstDefined(b, ['trigger_enabled','triggerEnabled','trig_enabled','trigEnabled'])),
     trigger_parameter: cleanValue(firstDefined(b, ['trigger_parameter','triggerParameter','trig_param','trigParam','selection','izbor'])),
@@ -256,7 +264,7 @@ app.get('/', requireViewTokenIfSet, (req, res) => {
 app.post('/api/push', requireDeviceToken, (req, res) => {
   const item = normalizePayload(req.body, req);
   latest = item;
-  history.push(item);
+  if (hasMeasurementValues(item)) history.push(item);
   pushCount += 1;
   while (history.length > HISTORY_LIMIT) history.shift();
   res.json({ ok:true, stored:true, push_count: pushCount, history_count: history.length, allow_remote_commands: item.allow_remote_commands, command_queue_enabled: item.command_queue_enabled, commands_active: item.commands_active, latest: item });
@@ -330,7 +338,7 @@ app.post('/api/ack', requireDeviceToken, (req, res) => {
       last_command_message: ack.message || 'ACK state applied'
     });
     latest = normalizePayload(merged, req);
-    history.push(latest);
+    if (hasMeasurementValues(latest)) history.push(latest);
     pushCount += 1;
     while (history.length > HISTORY_LIMIT) history.shift();
     ack.latest_updated_from_ack = true;
